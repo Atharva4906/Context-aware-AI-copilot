@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, Compass, Activity, LayoutDashboard, BrainCircuit } from 'lucide-react';
+import { BookOpen, Compass, Activity, LayoutDashboard, BrainCircuit, ShieldCheck, Gauge } from 'lucide-react';
 import { useStore } from '../store/useStore';
 
 export default function Sidebar() {
@@ -11,6 +11,8 @@ export default function Sidebar() {
     { icon: LayoutDashboard, label: 'Dashboard' },
     { icon: Compass, label: 'Learning Paths' },
     { icon: Activity, label: 'Performance' },
+    { icon: ShieldCheck, label: 'Audit Trail' },
+    { icon: Gauge, label: 'Reinforcement Lab' },
   ];
 
   return (

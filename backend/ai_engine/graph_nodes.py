@@ -36,6 +36,48 @@ def _clean_json(raw: str) -> str:
     return raw.strip()
 
 
+def parse_question_from_text(raw_text: str, category: str) -> dict:
+    """Parse raw pasted question text into the expected JSON shape."""
+    system = (
+        "You are a strict JSON formatter for exam questions. "
+        "Convert raw pasted text into a JSON object with keys: "
+        "category, content, options, correct_answer. "
+        "If options are missing, set options to null. "
+        "Only set correct_answer if it is explicitly provided in the text. "
+        "Return ONLY raw JSON. No markdown, no commentary."
+    )
+    user = dedent(f"""
+        Category to use: {category}
+
+        Raw text:
+        ---
+        {raw_text}
+        ---
+
+        Rules:
+        - content: question stem only (no option letters).
+        - options: array of option strings in order, or null if absent.
+        - correct_answer: explicit answer text if clearly provided, else null.
+        - Do not infer or guess the correct answer.
+
+        Output JSON only.
+        Example:
+        {{
+          "category": "Math",
+          "content": "A rectangle has a perimeter of 24 units. If the length is twice the width, what is the area of the rectangle?",
+          "options": ["32", "24", "16", "20"],
+          "correct_answer": null
+        }}
+    """)
+    raw = _call(groq_llm_8b, system, user)
+    try:
+        parsed = json.loads(_clean_json(raw))
+        return parsed if isinstance(parsed, dict) else {}
+    except Exception as e:
+        print(f"[parse_question_from_text] parse error: {e} | raw={raw}")
+        return {}
+
+
 # ─── Concept-extraction graph node ──────────────────────────────────────────
 def concept_extractor_node(state: ConceptState) -> dict:
     question = state["question_content"]

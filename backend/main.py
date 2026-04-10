@@ -7,6 +7,11 @@ from models.schemas import (
     RLFeedbackRequest, 
     RLFeedbackResponse,
     QuestionModel,
+    ParsedQuestion,
+    ParseQuestionRequest,
+    ParseQuestionResponse,
+    CreateQuestionRequest,
+    CreateQuestionResponse,
     DashboardStatsResponse,
     HistoryResponse,
     HistoryItemModel,
@@ -15,10 +20,10 @@ from models.schemas import (
     AnswerDetectRequest,
     AnswerDetectResponse
 )
-from database.supabase_client import get_supabase_client, get_student_history, log_interaction
+from database.supabase_client import get_supabase_client, get_student_history, log_interaction, insert_question
 from ai_engine.rl_engine import generate_pattern_hash, get_rl_prediction, update_rl_policy, get_knowledge_graph_predictions
 from ai_engine.graph_runner import run_diagnostic_crew, run_logic_verification_questions, run_concept_extraction
-from ai_engine.graph_nodes import detect_correct_answer, extract_topic_from_verdict
+from ai_engine.graph_nodes import detect_correct_answer, extract_topic_from_verdict, parse_question_from_text
 
 app = FastAPI(title="Context-Aware AI Co-Pilot API")
 
@@ -32,6 +37,8 @@ app.add_middleware(
 )
 
 supabase = get_supabase_client()
+
+ALLOWED_CATEGORIES = {"Math", "Physics", "English", "Coding"}
 
 @app.post("/api/analyze-response", response_model=AnalyzeResponse)
 async def analyze_response(request: AnalyzeRequest):
@@ -211,6 +218,74 @@ async def get_questions(category: Optional[str] = Query(None)):
             query = query.eq('category', category)
         res = query.execute()
         return res.data if res.data else []
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/parse-question", response_model=ParseQuestionResponse)
+async def parse_question(request: ParseQuestionRequest):
+    try:
+        raw_text = request.raw_text.strip()
+        if not raw_text:
+            raise HTTPException(status_code=400, detail="Question text is required.")
+
+        category = request.category.strip()
+        if category not in ALLOWED_CATEGORIES:
+            raise HTTPException(status_code=400, detail="Invalid category.")
+
+        parsed = parse_question_from_text(raw_text, category)
+        if not parsed or not parsed.get("content"):
+            raise HTTPException(status_code=422, detail="Unable to parse question content.")
+
+        parsed["category"] = category
+
+        options = parsed.get("options")
+        if options is not None:
+            normalized = [str(opt).strip() for opt in options if str(opt).strip()]
+            parsed["options"] = normalized or None
+        else:
+            parsed["options"] = None
+
+        correct_answer = parsed.get("correct_answer")
+        if isinstance(correct_answer, str):
+            parsed["correct_answer"] = correct_answer.strip() or None
+        else:
+            parsed["correct_answer"] = None
+
+        return ParseQuestionResponse(parsed=ParsedQuestion(**parsed))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/questions", response_model=CreateQuestionResponse)
+async def create_question(request: CreateQuestionRequest):
+    try:
+        category = request.category.strip()
+        if category not in ALLOWED_CATEGORIES:
+            raise HTTPException(status_code=400, detail="Invalid category.")
+
+        content = request.content.strip()
+        if not content:
+            raise HTTPException(status_code=400, detail="Question content is required.")
+
+        options = request.options
+        if options is not None:
+            options = [opt.strip() for opt in options if isinstance(opt, str) and opt.strip()]
+            options = options or None
+
+        row = insert_question(category=category, content=content, options=options)
+        if not row:
+            raise HTTPException(status_code=500, detail="Failed to save question.")
+
+        return CreateQuestionResponse(
+            id=row.get("id"),
+            category=row.get("category", category),
+            content=row.get("content", content),
+            options=row.get("options", options),
+            correct_answer=request.correct_answer
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

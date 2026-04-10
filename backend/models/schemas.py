@@ -52,6 +52,25 @@ class QuestionModel(BaseModel):
     options: Optional[List[str]] = None
     correct_answer: Optional[str] = None
 
+class ParsedQuestion(BaseModel):
+    category: str
+    content: str
+    options: Optional[List[str]] = None
+    correct_answer: Optional[str] = None
+
+class ParseQuestionRequest(BaseModel):
+    raw_text: str
+    category: str
+
+class ParseQuestionResponse(BaseModel):
+    parsed: ParsedQuestion
+
+class CreateQuestionRequest(ParsedQuestion):
+    pass
+
+class CreateQuestionResponse(ParsedQuestion):
+    id: str
+
 class AnswerDetectRequest(BaseModel):
     question_content: str
     options: List[str]

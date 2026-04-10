@@ -6,6 +6,8 @@ import LearningHub from '../components/LearningHub';
 import FloatingCoPilot from '../components/FloatingCoPilot';
 import StudentStatsOverview from '../components/StudentStatsOverview';
 import StudentHistory from '../components/StudentHistory';
+import AuditTrail from '../components/AuditTrail';
+import ReinforcementLab from '../components/ReinforcementLab';
 
 export default function StudentDashboard() {
   const user = useStore((state) => state.user);
@@ -32,6 +34,8 @@ export default function StudentDashboard() {
       {currentView === 'Learning Paths' && <LearningHub />}
       {currentView === 'Dashboard' && <StudentStatsOverview />}
       {currentView === 'Performance' && <StudentHistory />}
+      {currentView === 'Audit Trail' && <AuditTrail />}
+      {currentView === 'Reinforcement Lab' && <ReinforcementLab />}
       
       <FloatingCoPilot />
     </div>

@@ -45,3 +45,17 @@ def log_interaction(student_id: str, user_query: str, agent_response: str, quest
         }).execute()
     except Exception as e:
         print(f"Error logging interaction: {e}")
+
+def insert_question(category: str, content: str, options: list | None = None):
+    """Insert a question into the questions table."""
+    try:
+        payload = {
+            'category': category,
+            'content': content,
+            'options': options
+        }
+        res = supabase.table('questions').insert(payload).execute()
+        return res.data[0] if res.data else None
+    except Exception as e:
+        print(f"Error inserting question: {e}")
+        return None

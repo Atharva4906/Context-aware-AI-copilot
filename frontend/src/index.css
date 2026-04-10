@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=JetBrains+Mono:wght@400;600&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
 @import "tailwindcss";
 
@@ -11,11 +12,90 @@
   }
 }
 
+:root {
+  --ingest-font: 'Space Grotesk', sans-serif;
+  --ingest-title: 'Fraunces', serif;
+  --ingest-glow: rgba(251, 191, 36, 0.35);
+  --ingest-surface: rgba(45, 27, 12, 0.92);
+  --ingest-surface-2: rgba(120, 53, 15, 0.55);
+  --ingest-border: rgba(251, 191, 36, 0.25);
+  --ingest-accent: #fbbf24;
+}
+
 .glass-panel {
   background-color: rgba(30, 41, 59, 0.6);
   backdrop-filter: blur(12px);
   border: 1px solid rgba(51, 65, 85, 0.5);
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.ingest-shell {
+  font-family: var(--ingest-font);
+  background: radial-gradient(circle at top, rgba(251, 191, 36, 0.12), transparent 55%),
+    linear-gradient(140deg, rgba(15, 23, 42, 0.92) 15%, rgba(120, 53, 15, 0.72) 100%);
+  box-shadow: 0 30px 60px -30px var(--ingest-glow), 0 12px 20px -10px rgba(15, 23, 42, 0.8);
+}
+
+.ingest-header {
+  background: linear-gradient(120deg, rgba(251, 191, 36, 0.2), rgba(15, 23, 42, 0.6));
+  cursor: grab;
+}
+
+.ingest-header:active {
+  cursor: grabbing;
+}
+
+.ingest-title {
+  font-family: var(--ingest-title);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fef3c7;
+}
+
+.ingest-textarea {
+  resize: none;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ingest-textarea:focus {
+  border-color: var(--ingest-accent);
+  box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.4);
+}
+
+.ingest-select {
+  color: #fef3c7;
+  outline: none;
+}
+
+.ingest-action {
+  color: #fef3c7;
+  background: rgba(15, 23, 42, 0.45);
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.ingest-action:hover {
+  transform: translateY(-1px);
+  border-color: rgba(251, 191, 36, 0.6);
+}
+
+.ingest-save {
+  background: linear-gradient(120deg, #fde68a, #f59e0b);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ingest-save:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ingest-save:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 25px -12px rgba(251, 191, 36, 0.6);
+}
+
+.ingest-code {
+  font-family: 'JetBrains Mono', monospace;
 }
 
 /* Scrollbar customization for the sleek look */
