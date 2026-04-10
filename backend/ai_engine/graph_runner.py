@@ -35,7 +35,7 @@ _verify_builder.add_edge("generator", END)
 verification_graph = _verify_builder.compile()
 
 
-# ─── 3. Diagnostic graph  (tutor + architect run in parallel) ─────────────────
+# ─── 3. Diagnostic graph  (sequential to avoid fan-out edge error) ───────────
 _diag_builder = StateGraph(DiagnosticState)
 _diag_builder.add_node("reasoner",  reasoner_node)
 _diag_builder.add_node("judge",     judge_node)
@@ -44,10 +44,8 @@ _diag_builder.add_node("architect", architect_node)
 
 _diag_builder.set_entry_point("reasoner")
 _diag_builder.add_edge("reasoner", "judge")
-# Fan-out: judge feeds BOTH tutor and architect in parallel
 _diag_builder.add_edge("judge", "tutor")
-_diag_builder.add_edge("judge", "architect")
-_diag_builder.add_edge("tutor", END)
+_diag_builder.add_edge("tutor", "architect")
 _diag_builder.add_edge("architect", END)
 diagnostic_graph = _diag_builder.compile()
 

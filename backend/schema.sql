@@ -84,3 +84,27 @@ ADD COLUMN IF NOT EXISTS question_id UUID REFERENCES questions(id) ON DELETE SET
 ADD COLUMN IF NOT EXISTS category TEXT,
 ADD COLUMN IF NOT EXISTS is_resolved BOOLEAN DEFAULT FALSE,
 ADD COLUMN IF NOT EXISTS predicted_misconception TEXT;
+
+-- 9. Misconception Review Queue (Admin Approval)
+-- New misconceptions are stored in common_misconceptions but gated here until approved.
+CREATE TABLE IF NOT EXISTS misconception_review_queue (
+    review_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    misconception_id UUID REFERENCES common_misconceptions(id) ON DELETE CASCADE,
+    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    similarity_score NUMERIC,
+    source_question_id UUID REFERENCES questions(id) ON DELETE SET NULL,
+    source_student_id UUID REFERENCES users(student_id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    reviewed_at TIMESTAMP WITH TIME ZONE
+);
+
+-- 10. Curriculum Graph Review Queue (Admin Approval)
+CREATE TABLE IF NOT EXISTS curriculum_graph_review_queue (
+    review_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    prerequisite_topic TEXT NOT NULL,
+    dependent_topic TEXT NOT NULL,
+    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    source_misconception_id UUID REFERENCES common_misconceptions(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    reviewed_at TIMESTAMP WITH TIME ZONE
+);

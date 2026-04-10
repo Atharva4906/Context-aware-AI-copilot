@@ -104,3 +104,67 @@ class ConceptRequest(BaseModel):
 class WeakConceptRequest(BaseModel):
     student_id: str
     concepts: List[str]
+
+class MisconceptionReviewItem(BaseModel):
+    review_id: str
+    status: str
+    similarity_score: Optional[float] = None
+    source_question_id: Optional[str] = None
+    source_student_id: Optional[str] = None
+    created_at: str
+    misconception_id: Optional[str] = None
+    topic: Optional[str] = None
+    flawed_logic_description: Optional[str] = None
+    remedial_strategy: Optional[str] = None
+
+class MisconceptionReviewResponse(BaseModel):
+    items: List[MisconceptionReviewItem]
+
+class GraphReviewItem(BaseModel):
+    review_id: str
+    prerequisite_topic: str
+    dependent_topic: str
+    status: str
+    source_misconception_id: Optional[str] = None
+    created_at: str
+
+class GraphReviewResponse(BaseModel):
+    items: List[GraphReviewItem]
+
+class GraphReviewCreateRequest(BaseModel):
+    prerequisite_topic: str
+    dependent_topic: str
+    source_misconception_id: Optional[str] = None
+
+class ClusterItem(BaseModel):
+    misconception: str
+    severity: str
+    studentCount: int
+    students: List[str]
+
+class ClusterResponse(BaseModel):
+    clusters: List[ClusterItem]
+
+class StudentMisconceptionItem(BaseModel):
+    state_id: str
+    student_id: str
+    student_name: Optional[str] = None
+    topic: Optional[str] = None
+    status: str
+    encounter_count: int
+    last_triggered_at: Optional[str] = None
+
+class StudentMisconceptionResponse(BaseModel):
+    items: List[StudentMisconceptionItem]
+
+class UpdateMisconceptionStatusRequest(BaseModel):
+    status: str
+
+class StudentRosterItem(BaseModel):
+    student_id: str
+    name: str
+    email: Optional[str] = None
+    role: Optional[str] = None
+
+class StudentRosterResponse(BaseModel):
+    students: List[StudentRosterItem]

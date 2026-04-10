@@ -18,12 +18,50 @@ from models.schemas import (
     ConceptRequest,
     WeakConceptRequest,
     AnswerDetectRequest,
-    AnswerDetectResponse
+    AnswerDetectResponse,
+    MisconceptionReviewResponse,
+    GraphReviewResponse,
+    GraphReviewCreateRequest,
+    ClusterResponse,
+    StudentMisconceptionResponse,
+    UpdateMisconceptionStatusRequest,
+    StudentRosterResponse
 )
-from database.supabase_client import get_supabase_client, get_student_history, log_interaction, insert_question
-from ai_engine.rl_engine import generate_pattern_hash, get_rl_prediction, update_rl_policy, get_knowledge_graph_predictions
+from database.supabase_client import (
+    get_supabase_client,
+    get_student_history,
+    log_interaction,
+    insert_question,
+    get_active_misconceptions,
+    insert_common_misconception,
+    insert_misconception_review,
+    get_misconception_reviews,
+    update_misconception_review_status,
+    upsert_student_misconception_state,
+    insert_graph_review,
+    get_graph_reviews,
+    update_graph_review_status,
+    insert_curriculum_edge,
+    get_student_misconception_records,
+    update_student_misconception_status,
+    get_students
+)
+from ai_engine.rl_engine import (
+    generate_pattern_hash,
+    get_rl_prediction,
+    update_rl_policy,
+    get_knowledge_graph_predictions,
+    generate_embedding,
+    cosine_similarity
+)
 from ai_engine.graph_runner import run_diagnostic_crew, run_logic_verification_questions, run_concept_extraction
-from ai_engine.graph_nodes import detect_correct_answer, extract_topic_from_verdict, parse_question_from_text
+from ai_engine.graph_nodes import (
+    detect_correct_answer,
+    extract_topic_from_verdict,
+    parse_question_from_text,
+    propose_misconception_candidate,
+    suggest_curriculum_edges
+)
 
 app = FastAPI(title="Context-Aware AI Co-Pilot API")
 
@@ -39,6 +77,7 @@ app.add_middleware(
 supabase = get_supabase_client()
 
 ALLOWED_CATEGORIES = {"Math", "Physics", "English", "Coding"}
+SIMILARITY_THRESHOLD = 0.78
 
 @app.post("/api/analyze-response", response_model=AnalyzeResponse)
 async def analyze_response(request: AnalyzeRequest):
@@ -92,10 +131,26 @@ async def analyze_response(request: AnalyzeRequest):
             user_query = f"Original guess: {user_query}. Follow up logic test: {request.follow_up_answers}"
 
         vector_results = []
+        best_match = None
+        best_score = 0.0
         try:
-            res = supabase.table('common_misconceptions').select('*').limit(3).execute()
-            if res.data:
-                vector_results = res.data
+            query_text = f"{current_context}\nStudent response: {user_query}"
+            query_embedding = generate_embedding(query_text)
+            active_misconceptions = get_active_misconceptions()
+
+            similarity_results = []
+            for row in active_misconceptions:
+                embedding = row.get('embedding')
+                if not embedding:
+                    continue
+                score = cosine_similarity(query_embedding, embedding)
+                similarity_results.append((score, row))
+
+            similarity_results.sort(key=lambda item: item[0], reverse=True)
+            vector_results = [row for score, row in similarity_results[:3]]
+
+            if similarity_results:
+                best_score, best_match = similarity_results[0]
         except Exception as e:
             print(f"Exception retrieving vector results: {e}")
 
@@ -124,9 +179,53 @@ async def analyze_response(request: AnalyzeRequest):
         # We extract a short label from the detailed verdict paragraph
         final_detected_topic = extract_topic_from_verdict(misconception_verdict, category=request.category or "")
         
+        # If we have a strong similarity match, anchor to that known misconception topic
+        close_match = best_match is not None and best_score >= SIMILARITY_THRESHOLD
+        misconception_id = None
+        if close_match:
+            misconception_id = best_match.get('id')
+            final_detected_topic = best_match.get('topic', final_detected_topic)
+
+        # If there is no close match, ask LLM to propose a new misconception
+        if not close_match:
+            candidate = propose_misconception_candidate(user_query, current_context, misconception_verdict)
+            if candidate.get('is_novel'):
+                topic = (candidate.get('topic') or '').strip()
+                flawed_logic = (candidate.get('flawed_logic_description') or '').strip()
+                remedial = (candidate.get('remedial_strategy') or '').strip()
+                if topic and flawed_logic and remedial:
+                    candidate_embedding = generate_embedding(f"{topic}. {flawed_logic}")
+                    new_row = insert_common_misconception(
+                        topic=topic,
+                        flawed_logic_description=flawed_logic,
+                        remedial_strategy=remedial,
+                        embedding=candidate_embedding
+                    )
+                    if new_row:
+                        misconception_id = new_row.get('id')
+                        final_detected_topic = topic
+                        insert_misconception_review(
+                            misconception_id=misconception_id,
+                            similarity_score=best_score,
+                            source_question_id=request.question_id,
+                            source_student_id=student_id
+                        )
+
         # If the AI couldn't find a specific topic, use the RL prediction as a secondary fallback
         if not final_detected_topic or "Conceptual" in final_detected_topic:
             final_detected_topic = predicted_rl_topic
+
+        if misconception_id:
+            upsert_student_misconception_state(student_id, misconception_id)
+
+        # Suggest curriculum graph edges (pending review)
+        if final_detected_topic:
+            edges = suggest_curriculum_edges(final_detected_topic, request.category or "", current_context)
+            for edge in edges:
+                prereq = (edge.get('prerequisite_topic') or '').strip()
+                dependent = (edge.get('dependent_topic') or '').strip()
+                if prereq and dependent:
+                    insert_graph_review(prereq, dependent, misconception_id)
 
         log_interaction(
             student_id=student_id, 
@@ -326,6 +425,172 @@ async def get_history(student_id: str):
     try:
         res = supabase.table('interaction_logs').select('*').eq('student_id', student_id).order('created_at', desc=True).execute()
         return HistoryResponse(history=res.data if res.data else [])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/admin/misconception-reviews", response_model=MisconceptionReviewResponse)
+async def list_misconception_reviews(status: Optional[str] = Query("pending")):
+    try:
+        items = []
+        for row in get_misconception_reviews(status=status):
+            details = row.get('common_misconceptions') or {}
+            items.append({
+                'review_id': row.get('review_id'),
+                'status': row.get('status'),
+                'similarity_score': row.get('similarity_score'),
+                'source_question_id': row.get('source_question_id'),
+                'source_student_id': row.get('source_student_id'),
+                'created_at': row.get('created_at'),
+                'misconception_id': row.get('misconception_id'),
+                'topic': details.get('topic'),
+                'flawed_logic_description': details.get('flawed_logic_description'),
+                'remedial_strategy': details.get('remedial_strategy')
+            })
+        return MisconceptionReviewResponse(items=items)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/admin/misconception-reviews/{review_id}/approve")
+async def approve_misconception_review(review_id: str):
+    if not update_misconception_review_status(review_id, "approved"):
+        raise HTTPException(status_code=500, detail="Failed to approve review.")
+    return {"status": "approved"}
+
+@app.post("/api/admin/misconception-reviews/{review_id}/reject")
+async def reject_misconception_review(review_id: str):
+    if not update_misconception_review_status(review_id, "rejected"):
+        raise HTTPException(status_code=500, detail="Failed to reject review.")
+    return {"status": "rejected"}
+
+@app.get("/api/admin/graph-reviews", response_model=GraphReviewResponse)
+async def list_graph_reviews(status: Optional[str] = Query("pending")):
+    try:
+        items = get_graph_reviews(status=status)
+        return GraphReviewResponse(items=items)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/admin/graph-reviews")
+async def create_graph_review(request: GraphReviewCreateRequest):
+    if not request.prerequisite_topic.strip() or not request.dependent_topic.strip():
+        raise HTTPException(status_code=400, detail="Both prerequisite and dependent topics are required.")
+    res = insert_graph_review(
+        request.prerequisite_topic.strip(),
+        request.dependent_topic.strip(),
+        request.source_misconception_id
+    )
+    return {"status": "queued", "review": res}
+
+@app.post("/api/admin/graph-reviews/{review_id}/approve")
+async def approve_graph_review(review_id: str):
+    items = get_graph_reviews(status="pending")
+    review = next((row for row in items if row.get('review_id') == review_id), None)
+    if not review:
+        raise HTTPException(status_code=404, detail="Review item not found.")
+
+    inserted = insert_curriculum_edge(review.get('prerequisite_topic'), review.get('dependent_topic'))
+    if not inserted:
+        raise HTTPException(status_code=500, detail="Failed to insert curriculum edge.")
+
+    if not update_graph_review_status(review_id, "approved"):
+        raise HTTPException(status_code=500, detail="Failed to approve review.")
+    return {"status": "approved"}
+
+@app.post("/api/admin/graph-reviews/{review_id}/reject")
+async def reject_graph_review(review_id: str):
+    if not update_graph_review_status(review_id, "rejected"):
+        raise HTTPException(status_code=500, detail="Failed to reject review.")
+    return {"status": "rejected"}
+
+@app.get("/api/admin/cluster-students", response_model=ClusterResponse)
+async def cluster_students():
+    try:
+        records = get_student_misconception_records()
+        clusters = {}
+
+        for row in records:
+            topic = None
+            if row.get('common_misconceptions'):
+                topic = row['common_misconceptions'].get('topic')
+            if not topic:
+                topic = "Unknown Misconception"
+
+            student_name = None
+            if row.get('users'):
+                student_name = row['users'].get('name')
+            student_name = student_name or row.get('student_id')
+
+            entry = clusters.setdefault(topic, {
+                'students': set(),
+                'encounters': []
+            })
+            entry['students'].add(student_name)
+            entry['encounters'].append(int(row.get('encounter_count') or 1))
+
+        cluster_items = []
+        for topic, data in clusters.items():
+            student_count = len(data['students'])
+            avg_encounter = sum(data['encounters']) / max(1, len(data['encounters']))
+            if student_count >= 6 or avg_encounter >= 3:
+                severity = "High"
+            elif student_count >= 3 or avg_encounter >= 2:
+                severity = "Medium"
+            else:
+                severity = "Low"
+
+            cluster_items.append({
+                'misconception': topic,
+                'severity': severity,
+                'studentCount': student_count,
+                'students': sorted(list(data['students']))
+            })
+
+        cluster_items.sort(key=lambda item: item['studentCount'], reverse=True)
+        return ClusterResponse(clusters=cluster_items)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/admin/student-misconceptions", response_model=StudentMisconceptionResponse)
+async def list_student_misconceptions():
+    try:
+        rows = get_student_misconception_records()
+        items = []
+        for row in rows:
+            topic = None
+            if row.get('common_misconceptions'):
+                topic = row['common_misconceptions'].get('topic')
+            student_name = None
+            if row.get('users'):
+                student_name = row['users'].get('name')
+
+            items.append({
+                'state_id': row.get('state_id'),
+                'student_id': row.get('student_id'),
+                'student_name': student_name,
+                'topic': topic,
+                'status': row.get('status'),
+                'encounter_count': row.get('encounter_count'),
+                'last_triggered_at': row.get('last_triggered_at')
+            })
+
+        return StudentMisconceptionResponse(items=items)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/admin/student-misconceptions/{state_id}/status")
+async def set_student_misconception_status(state_id: str, request: UpdateMisconceptionStatusRequest):
+    status = request.status.strip().lower()
+    if status not in {"unresolved", "reviewing", "resolved"}:
+        raise HTTPException(status_code=400, detail="Invalid status.")
+    if not update_student_misconception_status(state_id, status):
+        raise HTTPException(status_code=500, detail="Failed to update status.")
+    return {"status": status}
+
+@app.get("/api/admin/students", response_model=StudentRosterResponse)
+async def list_students():
+    try:
+        rows = get_students()
+        return StudentRosterResponse(students=rows)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import { useNavigate } from 'react-router-dom';
-import { Users, AlertTriangle, CheckCircle, BarChart3, LogOut, Search } from 'lucide-react';
+import { Users, AlertTriangle, CheckCircle, BarChart3, LogOut, Search, Check, X } from 'lucide-react';
 import axios from 'axios';
 
 export default function EducatorDashboard() {
@@ -11,6 +11,13 @@ export default function EducatorDashboard() {
   
   const [clusters, setClusters] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [misconceptionReviews, setMisconceptionReviews] = useState([]);
+  const [graphReviews, setGraphReviews] = useState([]);
+  const [studentMisconceptions, setStudentMisconceptions] = useState([]);
+  const [students, setStudents] = useState([]);
+  const [edgePrereq, setEdgePrereq] = useState('');
+  const [edgeDependent, setEdgeDependent] = useState('');
+  const [reviewStatus, setReviewStatus] = useState('');
 
   // Note: For hackathon purpose, if backend route is not ready, we mock it.
   useEffect(() => {
@@ -19,45 +26,108 @@ export default function EducatorDashboard() {
       return;
     }
 
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
     const fetchClusters = async () => {
       try {
-        const response = await axios.get('http://localhost:8000/api/admin/cluster-students');
+        const response = await axios.get(`${apiUrl}/api/admin/cluster-students`);
         setClusters(response.data.clusters);
+        setIsLoading(false);
       } catch (err) {
-        console.error("Failed to fetch clusters. Using mock data for UI demo.", err);
-        // Fallback Mock Data for UI presentation
-        setTimeout(() => {
-          setClusters([
-            {
-              misconception: "Variable Scope (Lexical vs Global)",
-              severity: "High",
-              studentCount: 8,
-              students: ["Atharva P.", "John D.", "Sarah M.", "Alex K.", "Priya S.", "Liam W.", "Emma R.", "Noah B."]
-            },
-            {
-              misconception: "For-Loop Off-by-One Error",
-              severity: "Medium",
-              studentCount: 3,
-              students: ["David L.", "Mia C.", "James P."]
-            },
-            {
-              misconception: "Confusion between Force and Velocity",
-              severity: "High",
-              studentCount: 5,
-              students: ["Atharva P.", "Chloe S.", "Ben T.", "Sophia H.", "Elijah G."]
-            }
-          ]);
-          setIsLoading(false);
-        }, 800);
+        console.error("Failed to fetch clusters.", err);
+        setIsLoading(false);
+      }
+    };
+
+    const fetchReviews = async () => {
+      try {
+        const [misconceptionsRes, graphRes] = await Promise.all([
+          axios.get(`${apiUrl}/api/admin/misconception-reviews`),
+          axios.get(`${apiUrl}/api/admin/graph-reviews`)
+        ]);
+        setMisconceptionReviews(misconceptionsRes.data.items || []);
+        setGraphReviews(graphRes.data.items || []);
+      } catch (err) {
+        console.error('Failed to fetch review queues', err);
+      }
+    };
+
+    const fetchStudentData = async () => {
+      try {
+        const [misconceptionsRes, studentsRes] = await Promise.all([
+          axios.get(`${apiUrl}/api/admin/student-misconceptions`),
+          axios.get(`${apiUrl}/api/admin/students`)
+        ]);
+        setStudentMisconceptions(misconceptionsRes.data.items || []);
+        setStudents(studentsRes.data.students || []);
+      } catch (err) {
+        console.error('Failed to fetch student data', err);
       }
     };
 
     fetchClusters();
+    fetchReviews();
+    fetchStudentData();
   }, [user, navigate]);
 
   const handleLogout = () => {
     logout();
     navigate('/');
+  };
+
+  const handleReviewDecision = async (reviewId, type, decision) => {
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const path = type === 'misconception'
+        ? `/api/admin/misconception-reviews/${reviewId}/${decision}`
+        : `/api/admin/graph-reviews/${reviewId}/${decision}`;
+      await axios.post(`${apiUrl}${path}`);
+      setReviewStatus(`${decision === 'approve' ? 'Approved' : 'Rejected'} ${type} review.`);
+      const refreshed = await Promise.all([
+        axios.get(`${apiUrl}/api/admin/misconception-reviews`),
+        axios.get(`${apiUrl}/api/admin/graph-reviews`)
+      ]);
+      setMisconceptionReviews(refreshed[0].data.items || []);
+      setGraphReviews(refreshed[1].data.items || []);
+    } catch (err) {
+      console.error(err);
+      setReviewStatus('Failed to update review status.');
+    }
+  };
+
+  const handleCreateEdge = async () => {
+    if (!edgePrereq.trim() || !edgeDependent.trim()) {
+      setReviewStatus('Both prerequisite and dependent topics are required.');
+      return;
+    }
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      await axios.post(`${apiUrl}/api/admin/graph-reviews`, {
+        prerequisite_topic: edgePrereq.trim(),
+        dependent_topic: edgeDependent.trim()
+      });
+      setReviewStatus('Graph edge queued for review.');
+      setEdgePrereq('');
+      setEdgeDependent('');
+      const graphRes = await axios.get(`${apiUrl}/api/admin/graph-reviews`);
+      setGraphReviews(graphRes.data.items || []);
+    } catch (err) {
+      console.error(err);
+      setReviewStatus('Failed to queue graph edge.');
+    }
+  };
+
+  const handleStatusUpdate = async (stateId, status) => {
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      await axios.post(`${apiUrl}/api/admin/student-misconceptions/${stateId}/status`, { status });
+      setReviewStatus(`Status updated to ${status}.`);
+      const res = await axios.get(`${apiUrl}/api/admin/student-misconceptions`);
+      setStudentMisconceptions(res.data.items || []);
+    } catch (err) {
+      console.error(err);
+      setReviewStatus('Failed to update status.');
+    }
   };
 
   if (!user || user.role !== 'educator') return null;
@@ -119,6 +189,9 @@ export default function EducatorDashboard() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+              {clusters.length === 0 && (
+                <div className="col-span-full text-slate-400">No cluster data available yet.</div>
+              )}
               {clusters.map((cluster, idx) => (
                 <div key={idx} className="glass-panel p-6 rounded-3xl hover:border-purple-500/30 transition-all duration-300 group">
                   <div className="flex justify-between items-start mb-4">
@@ -157,6 +230,158 @@ export default function EducatorDashboard() {
               ))}
             </div>
           )}
+
+          <div className="mt-12 grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="glass-panel p-6 rounded-3xl border border-slate-700/50">
+              <div className="flex items-center gap-3 mb-4">
+                <AlertTriangle className="w-5 h-5 text-amber-400" />
+                <h3 className="text-xl font-semibold text-white">Misconception Review</h3>
+              </div>
+              {misconceptionReviews.length === 0 && (
+                <div className="text-slate-400 text-sm">No pending misconceptions.</div>
+              )}
+              {misconceptionReviews.map((item) => (
+                <div key={item.review_id} className="mb-4 rounded-2xl border border-slate-700/60 bg-slate-900/60 p-4">
+                  <p className="text-sm font-semibold text-slate-100">{item.topic || 'Untitled topic'}</p>
+                  <p className="text-xs text-slate-400 mt-2">{item.flawed_logic_description}</p>
+                  <p className="text-xs text-slate-500 mt-2">Remedy: {item.remedial_strategy}</p>
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      onClick={() => handleReviewDecision(item.review_id, 'misconception', 'approve')}
+                      className="flex items-center gap-2 rounded-xl border border-emerald-400/30 px-3 py-2 text-xs text-emerald-200"
+                    >
+                      <Check className="w-3.5 h-3.5" /> Approve
+                    </button>
+                    <button
+                      onClick={() => handleReviewDecision(item.review_id, 'misconception', 'reject')}
+                      className="flex items-center gap-2 rounded-xl border border-rose-400/30 px-3 py-2 text-xs text-rose-200"
+                    >
+                      <X className="w-3.5 h-3.5" /> Reject
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="glass-panel p-6 rounded-3xl border border-slate-700/50">
+              <div className="flex items-center gap-3 mb-4">
+                <CheckCircle className="w-5 h-5 text-emerald-400" />
+                <h3 className="text-xl font-semibold text-white">Curriculum Graph Review</h3>
+              </div>
+              {graphReviews.length === 0 && (
+                <div className="text-slate-400 text-sm">No pending graph edges.</div>
+              )}
+              {graphReviews.map((item) => (
+                <div key={item.review_id} className="mb-4 rounded-2xl border border-slate-700/60 bg-slate-900/60 p-4">
+                  <p className="text-sm text-slate-100">{item.prerequisite_topic} → {item.dependent_topic}</p>
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      onClick={() => handleReviewDecision(item.review_id, 'graph', 'approve')}
+                      className="flex items-center gap-2 rounded-xl border border-emerald-400/30 px-3 py-2 text-xs text-emerald-200"
+                    >
+                      <Check className="w-3.5 h-3.5" /> Approve
+                    </button>
+                    <button
+                      onClick={() => handleReviewDecision(item.review_id, 'graph', 'reject')}
+                      className="flex items-center gap-2 rounded-xl border border-rose-400/30 px-3 py-2 text-xs text-rose-200"
+                    >
+                      <X className="w-3.5 h-3.5" /> Reject
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              <div className="mt-4 border-t border-slate-700/60 pt-4">
+                <p className="text-xs text-slate-400 uppercase tracking-wider mb-2">Add edge manually</p>
+                <div className="flex flex-col gap-2">
+                  <input
+                    value={edgePrereq}
+                    onChange={(event) => setEdgePrereq(event.target.value)}
+                    placeholder="Prerequisite topic"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs text-slate-200"
+                  />
+                  <input
+                    value={edgeDependent}
+                    onChange={(event) => setEdgeDependent(event.target.value)}
+                    placeholder="Dependent topic"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs text-slate-200"
+                  />
+                  <button
+                    onClick={handleCreateEdge}
+                    className="rounded-xl border border-emerald-400/40 px-3 py-2 text-xs text-emerald-200"
+                  >
+                    Queue Edge
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {reviewStatus && (
+            <div className="mt-6 rounded-2xl border border-slate-700/60 bg-slate-900/60 p-4 text-xs text-slate-300">
+              {reviewStatus}
+            </div>
+          )}
+
+          <div className="mt-12 grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="glass-panel p-6 rounded-3xl border border-slate-700/50">
+              <div className="flex items-center gap-3 mb-4">
+                <Users className="w-5 h-5 text-cyan-300" />
+                <h3 className="text-xl font-semibold text-white">Student Misconceptions</h3>
+              </div>
+              {studentMisconceptions.length === 0 && (
+                <div className="text-slate-400 text-sm">No student misconception data yet.</div>
+              )}
+              {studentMisconceptions.map((item) => (
+                <div key={item.state_id} className="mb-4 rounded-2xl border border-slate-700/60 bg-slate-900/60 p-4">
+                  <p className="text-sm text-slate-100">
+                    <span className="font-semibold">{item.student_name || item.student_id}</span> — {item.topic || 'Unknown topic'}
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Encounters: {item.encounter_count} • Status: {item.status}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      onClick={() => handleStatusUpdate(item.state_id, 'unresolved')}
+                      className="rounded-xl border border-amber-400/30 px-3 py-1.5 text-[11px] text-amber-200"
+                    >
+                      Mark Unresolved
+                    </button>
+                    <button
+                      onClick={() => handleStatusUpdate(item.state_id, 'reviewing')}
+                      className="rounded-xl border border-blue-400/30 px-3 py-1.5 text-[11px] text-blue-200"
+                    >
+                      Mark Reviewing
+                    </button>
+                    <button
+                      onClick={() => handleStatusUpdate(item.state_id, 'resolved')}
+                      className="rounded-xl border border-emerald-400/30 px-3 py-1.5 text-[11px] text-emerald-200"
+                    >
+                      Mark Resolved
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="glass-panel p-6 rounded-3xl border border-slate-700/50">
+              <div className="flex items-center gap-3 mb-4">
+                <Users className="w-5 h-5 text-purple-300" />
+                <h3 className="text-xl font-semibold text-white">Student Roster</h3>
+              </div>
+              {students.length === 0 && (
+                <div className="text-slate-400 text-sm">No students found.</div>
+              )}
+              <div className="space-y-3">
+                {students.map((student) => (
+                  <div key={student.student_id} className="rounded-2xl border border-slate-700/60 bg-slate-900/60 p-3">
+                    <p className="text-sm text-slate-100 font-semibold">{student.name}</p>
+                    <p className="text-xs text-slate-400">{student.email || 'No email'} • {student.role || 'student'}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

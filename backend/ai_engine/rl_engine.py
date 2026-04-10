@@ -1,7 +1,39 @@
 import random
+from math import sqrt
+from sentence_transformers import SentenceTransformer
 from database.supabase_client import get_supabase_client
 
 supabase = get_supabase_client()
+
+_embedder = None
+
+def _get_embedder() -> SentenceTransformer:
+    global _embedder
+    if _embedder is None:
+        _embedder = SentenceTransformer("all-mpnet-base-v2")
+    return _embedder
+
+def generate_embedding(text: str) -> list:
+    """Generate a 768-dim embedding for similarity matching."""
+    if not text:
+        return []
+    try:
+        embedder = _get_embedder()
+        vector = embedder.encode([text], normalize_embeddings=True)[0]
+        return vector.tolist()
+    except Exception as e:
+        print(f"Embedding error: {e}")
+        return []
+
+def cosine_similarity(vec_a: list, vec_b: list) -> float:
+    """Cosine similarity for normalized vectors."""
+    if not vec_a or not vec_b or len(vec_a) != len(vec_b):
+        return 0.0
+    try:
+        return sum(a * b for a, b in zip(vec_a, vec_b))
+    except Exception:
+        denom = (sqrt(sum(a * a for a in vec_a)) * sqrt(sum(b * b for b in vec_b)))
+        return sum(a * b for a, b in zip(vec_a, vec_b)) / denom if denom else 0.0
 
 EPSILON = 0.10  # 10% exploration rate
 

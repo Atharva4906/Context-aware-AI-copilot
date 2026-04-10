@@ -6,7 +6,7 @@ import { useStore } from '../store/useStore';
 import { 
   Sparkles, X, Send, AlertCircle, Bot, 
   ThumbsUp, ThumbsDown, Activity, Target, 
-  Search, AlertTriangle, HelpCircle, Compass 
+  Search, AlertTriangle, HelpCircle, Compass, Plus
 } from 'lucide-react';
 
 const CATEGORY_OPTIONS = ["Math", "Physics", "English", "Coding"];
@@ -50,6 +50,11 @@ export default function FloatingQuestionIngest() {
   const [predictedTopic, setPredictedTopic] = useState(null);
   const [rlSubmitted, setRlSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // ── Detect-concepts state ──
+  const [concepts, setConcepts] = useState([]);
+  const [markedConcepts, setMarkedConcepts] = useState([]);
+  const [detecting, setDetecting] = useState(false);
   
   const containerRef = useRef(null);
   const scrollRef = useRef(null);
@@ -66,9 +71,8 @@ export default function FloatingQuestionIngest() {
 
     lines.forEach(line => {
       const cleanLine = line.trim();
-      if (!cleanLine) return; // Skip empty spacing lines
+      if (!cleanLine) return; 
 
-      // Heuristic to detect a header: Starts with #, **, OR is short and doesn't end in punctuation
       const isHeader = cleanLine.startsWith('#') || 
                       (cleanLine.startsWith('**') && cleanLine.endsWith('**')) ||
                       (cleanLine.length < 50 && !cleanLine.match(/[.!?]$/) && !cleanLine.startsWith('-'));
@@ -98,7 +102,7 @@ export default function FloatingQuestionIngest() {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [parsed, tutorFeedback, needsVerification, error, isParsing, isSubmitting]);
+  }, [parsed, tutorFeedback, needsVerification, error, isParsing, isSubmitting, concepts]);
 
   useEffect(() => {
     return () => {
@@ -158,6 +162,8 @@ export default function FloatingQuestionIngest() {
     setPatternHash(null);
     setPredictedTopic(null);
     setRlSubmitted(false);
+    setConcepts([]);
+    setMarkedConcepts([]);
 
     if (!rawText.trim()) return;
 
@@ -185,6 +191,35 @@ export default function FloatingQuestionIngest() {
       setError(parseError?.response?.data?.detail || 'Parsing failed. Try again.');
     } finally {
       setIsParsing(false);
+    }
+  };
+
+  const handleDetectConcepts = async () => {
+    if (!parsed?.content) return;
+    setDetecting(true);
+    try {
+      const res = await axios.post(`${apiUrl}/api/detect-concepts`, {
+        question_content: parsed.content
+      });
+      setConcepts(res.data.concepts || []);
+    } catch (e) {
+      console.error(e);
+      setConcepts(['Analytical Reasoning', 'Formula Application', 'Problem Solving']);
+    }
+    setDetecting(false);
+  };
+
+  const handleAddWeakConcept = async (concept) => {
+    if (markedConcepts.includes(concept)) return;
+    try {
+      await axios.post(`${apiUrl}/api/weak-concepts`, {
+        student_id: studentId,
+        concepts: [concept]
+      });
+      setMarkedConcepts(prev => [...prev, concept]);
+    } catch (e) {
+      console.error(e);
+      setMarkedConcepts(prev => [...prev, concept]);
     }
   };
 
@@ -322,9 +357,62 @@ export default function FloatingQuestionIngest() {
             </div>
             <div className="bg-neutral-800/50 border border-white/5 rounded-xl p-4 text-sm leading-relaxed">
               <p className="mb-4">{parsed.content}</p>
+
+              {/* ── Detect Concepts UI (Compact) ── */}
+              {!needsVerification && !tutorFeedback && (
+                <div className="mb-4 border-b border-white/5 pb-4">
+                  {concepts.length === 0 ? (
+                    <button
+                      onClick={handleDetectConcepts}
+                      disabled={detecting || isSubmitting}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-neutral-800 hover:bg-blue-500/20 hover:text-blue-400 text-neutral-300 text-xs font-medium rounded-lg border border-white/10 transition-colors w-fit"
+                    >
+                      <Target className="w-3.5 h-3.5" />
+                      {detecting ? 'Detecting...' : 'Detect Concepts'}
+                    </button>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-[10px] text-neutral-500 uppercase tracking-wider font-semibold">
+                        Detected Concepts (Click + to flag as weak)
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {concepts.map((concept, idx) => {
+                          const marked = markedConcepts.includes(concept);
+                          return (
+                            <div
+                              key={idx}
+                              className={`flex items-center gap-1.5 pl-2.5 pr-1 py-1 rounded-md text-[11px] font-medium border transition-all ${
+                                marked
+                                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                                  : 'bg-neutral-800 border-white/10 text-neutral-300'
+                              }`}
+                            >
+                              <span>{concept}</span>
+                              {marked ? (
+                                <span className="px-1 py-0.5 text-[9px] rounded border border-amber-500/30 bg-amber-500/10 text-amber-200">
+                                  Weak ✓
+                                </span>
+                              ) : (
+                                <button
+                                  onClick={() => handleAddWeakConcept(concept)}
+                                  className="p-1 rounded bg-neutral-700 hover:bg-amber-500/30 hover:text-amber-300 transition-colors"
+                                >
+                                  <Plus className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Options */}
               {parsed.options?.length > 0 ? (
                 !needsVerification && !tutorFeedback && (
-                  <div className="space-y-2 mt-4">
+                  <div className="space-y-2">
                     {parsed.options.map((opt, idx) => (
                       <label
                         key={idx}

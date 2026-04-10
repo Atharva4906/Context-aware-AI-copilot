@@ -78,6 +78,74 @@ def parse_question_from_text(raw_text: str, category: str) -> dict:
         return {}
 
 
+def propose_misconception_candidate(user_query: str, current_context: str, verdict: str) -> dict:
+    """Propose a new misconception candidate when the verdict indicates novelty."""
+    system = (
+        "You are an expert misconception curator. "
+        "If the verdict indicates a novel error, propose a misconception record. "
+        "Return ONLY valid JSON with keys: is_novel, topic, flawed_logic_description, remedial_strategy."
+    )
+    user = dedent(f"""
+        Context:
+        {current_context}
+
+        Student response:
+        {user_query}
+
+        Judge verdict:
+        {verdict}
+
+        Rules:
+        - If the verdict maps to a known misconception, set is_novel=false and keep other fields empty.
+        - If novel, create a concise topic (2-6 words), a clear flawed_logic_description, and a helpful remedial_strategy.
+        - Return JSON only.
+
+        Example:
+        {{
+          "is_novel": true,
+          "topic": "Order of Operations Confusion",
+          "flawed_logic_description": "Student adds before multiplying...",
+          "remedial_strategy": "Re-teach PEMDAS using a worked example."
+        }}
+    """)
+    raw = _call(groq_llm_8b, system, user)
+    try:
+        candidate = json.loads(_clean_json(raw))
+        return candidate if isinstance(candidate, dict) else {}
+    except Exception as e:
+        print(f"[propose_misconception_candidate] parse error: {e} | raw={raw}")
+        return {}
+
+
+def suggest_curriculum_edges(topic: str, category: str, context: str = "") -> list:
+    """Suggest downstream curriculum edges for the knowledge graph."""
+    system = (
+        "You are a curriculum graph builder. "
+        "Given a misconception topic, suggest 1-3 dependent topics that rely on it. "
+        "Return ONLY a JSON array of objects with prerequisite_topic and dependent_topic."
+    )
+    user = dedent(f"""
+        Category: {category}
+        Misconception topic: {topic}
+        Optional context:
+        {context}
+
+        Return only JSON array.
+        Example:
+        [
+          {{"prerequisite_topic": "Fraction Arithmetic", "dependent_topic": "Algebraic Fractions"}},
+          {{"prerequisite_topic": "Fraction Arithmetic", "dependent_topic": "Rational Expressions"}}
+        ]
+    """)
+    raw = _call(groq_llm_8b, system, user)
+    try:
+        edges = json.loads(_clean_json(raw))
+        return edges if isinstance(edges, list) else []
+    except Exception as e:
+        print(f"[suggest_curriculum_edges] parse error: {e} | raw={raw}")
+        return []
+
+
 # ─── Concept-extraction graph node ──────────────────────────────────────────
 def concept_extractor_node(state: ConceptState) -> dict:
     question = state["question_content"]
