@@ -1,12 +1,33 @@
 import { create } from 'zustand';
+import axios from 'axios';
 
 export const useStore = create((set) => ({
-  user: null, // { id: 'uuid', role: 'student' | 'educator', name: 'Atharva' }
-  studentId: 'student-uuid-123', // Keeping as fallback or update dynamically
-  login: (userData) => set({ user: userData, studentId: userData.id }),
+  user: null, 
+  studentId: '0e66f464-6255-4730-8429-ee14e5ef9bc7', 
+  lastGuessCorrect: false,
+  login: (userData) => set({ user: userData, studentId: userData.id || '0e66f464-6255-4730-8429-ee14e5ef9bc7' }),
   logout: () => set({ user: null }),
   currentContext: '',
-  setContext: (context) => set({ currentContext: context }),
+  setContext: (ctx) => set({ currentContext: ctx }),
+
+  questions: [],
+  currentQuestionIndex: 0,
+  currentView: 'Learning Paths',
+  setCurrentView: (view) => set({ currentView: view }),
+  fetchQuestions: async () => {
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const res = await axios.get(`${apiUrl}/api/questions`);
+      set({ questions: res.data });
+    } catch (e) {
+      console.error("Failed fetching questions", e);
+    }
+  },
+  nextQuestion: () => set((state) => ({ 
+    currentQuestionIndex: Math.min(state.currentQuestionIndex + 1, state.questions.length - 1),
+    lastGuessCorrect: false
+  })),
+
   triggerDiagnosis: false,
   setTriggerDiagnosis: (val) => set({ triggerDiagnosis: val }),
   

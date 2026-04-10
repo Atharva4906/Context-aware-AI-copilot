@@ -1,17 +1,56 @@
 import json
+import re
 from crewai import Crew, Process
 from ai_engine.tasks import (
     get_reasoning_extraction_task,
     get_misconception_verification_task,
     get_contextual_feedback_task,
-    get_mcq_generation_task
+    get_concept_extraction_task,
+    get_question_generation_task,
+    get_architect_mcq_task
 )
 from ai_engine.agents import (
     get_reasoner_agent,
     get_judge_agent,
     get_tutor_agent,
-    get_assessment_architect
+    get_assessment_architect,
+    get_concept_extractor_agent,
+    get_question_generator_agent
 )
+
+def run_concept_extraction(question_content: str) -> list:
+    """Runs a single agent to extract concepts."""
+    task = get_concept_extraction_task(question_content)
+    crew = Crew(
+        agents=[get_concept_extractor_agent()],
+        tasks=[task],
+        process=Process.sequential,
+        verbose=False
+    )
+    result = crew.kickoff()
+    try:
+        clean_res = re.sub(r'```json\s*', '', result.raw).replace("```", "").strip()
+        return json.loads(clean_res)
+    except Exception as e:
+        print("Failed parsing concepts:", e)
+        return []
+
+def run_logic_verification_questions(core_logic: str) -> list:
+    """Runs a single agent to generate 2 logic-based MCQs when a student guesses correctly."""
+    task = get_question_generation_task(core_logic)
+    crew = Crew(
+        agents=[get_question_generator_agent()],
+        tasks=[task],
+        process=Process.sequential,
+        verbose=False
+    )
+    result = crew.kickoff()
+    try:
+        clean_res = re.sub(r'```json\s*', '', result.raw).replace("```", "").strip()
+        return json.loads(clean_res)
+    except Exception as e:
+        print("Failed parsing generated questions:", e)
+        return []
 
 def run_diagnostic_crew(
     student_id: str,
@@ -22,12 +61,14 @@ def run_diagnostic_crew(
     encounter_count: int,
     predicted_rl_topic: str,
     guessing_detected: bool = False,
-    vulnerable_future_topics: list = None
+    vulnerable_future_topics: list = None,
+    weak_concepts: list = None,
+    true_answer: str = "Unknown"
 ) -> tuple:
     """
-    Executes the multi-agent workflow sequentially to generate feedback and an MCQ.
-    Returns: (feedback_markdown, mcq_dict)
+    Executes the multi-agent diagnostic workflow.
     """
+    weak_concepts = weak_concepts or []
     
     # Init Agents
     reasoner = get_reasoner_agent()
@@ -36,20 +77,19 @@ def run_diagnostic_crew(
     architect = get_assessment_architect()
     
     # Init Tasks
-    task1 = get_reasoning_extraction_task(user_query, current_context)
+    task1 = get_reasoning_extraction_task(user_query, current_context, true_answer)
     task2 = get_misconception_verification_task(vector_results)
     task3 = get_contextual_feedback_task(
-        student_id, 
-        historical_struggle, 
-        encounter_count, 
-        predicted_rl_topic,
+        historical_struggle=historical_struggle, 
+        encounter_count=encounter_count, 
+        predicted_rl_topic=predicted_rl_topic,
         guessing_detected=guessing_detected,
-        vulnerable_future_topics=vulnerable_future_topics
+        vulnerable_future_topics=vulnerable_future_topics,
+        weak_concepts=weak_concepts,
+        true_answer=true_answer
     )
-    task4 = get_mcq_generation_task()
+    task4 = get_architect_mcq_task(predicted_rl_topic)
     
-    # Form the Crew
-    # Using sequential process since each agent depends on the previous output
     crew = Crew(
         agents=[reasoner, judge, tutor, architect],
         tasks=[task1, task2, task3, task4],
@@ -57,30 +97,18 @@ def run_diagnostic_crew(
         verbose=True
     )
     
-    # Execution
-    print(f"Starting CrewAI for Student: {student_id}")
+    print(f"Starting Diagnostic Crew for Student: {student_id}")
     final_result = crew.kickoff()
-    
-    # The kickoff returns the output of the final task (Task 4: MCQ Generation).
-    # To get the feedback text, we actually need the output of Task 3.
-    # In CrewAI, you can access task outputs individually if you keep a reference.
     
     feedback_text = task3.output.raw_output if getattr(task3, 'output', None) else "No feedback generated."
     mcq_result_text = task4.output.raw_output if getattr(task4, 'output', None) else "{}"
     
-    # Parse MCQ json
     try:
-        # Strip potential markdown if LLM misbehaves
-        import re
         mcq_result_text = re.sub(r'```json\s*', '', mcq_result_text)
         mcq_result_text = re.sub(r'\s*```', '', mcq_result_text)
         mcq_dict = json.loads(mcq_result_text)
     except json.JSONDecodeError as e:
         print(f"Failed to parse MCQ JSON: {e}")
-        mcq_dict = {
-            "question": "Failed to generate question.",
-            "correct_answer": "N/A",
-            "distractors": []
-        }
+        mcq_dict = {}
         
     return feedback_text, mcq_dict

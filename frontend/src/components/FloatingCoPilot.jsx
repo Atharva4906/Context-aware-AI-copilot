@@ -22,17 +22,6 @@ export default function FloatingCoPilot() {
   const incrementSwitch = useStore((state) => state.incrementSwitch);
   const incrementBackspace = useStore((state) => state.incrementBackspace);
   const startTracking = useStore((state) => state.startTracking);
-  const triggerDiagnosis = useStore((state) => state.triggerDiagnosis);
-  const setTriggerDiagnosis = useStore((state) => state.setTriggerDiagnosis);
-
-  useEffect(() => {
-    if (triggerDiagnosis) {
-      setIsOpen(true);
-      setTriggerDiagnosis(false); // Reset it immediately
-      // Optionally pre-fill or directly trigger a diagnosis request
-      setInputValue("I'm not sure why I got this wrong. Can you diagnose my misconception?");
-    }
-  }, [triggerDiagnosis, setTriggerDiagnosis]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -58,10 +47,10 @@ export default function FloatingCoPilot() {
 
     const userMessage = { role: 'user', content: inputValue };
     setMessages(prev => [...prev, userMessage]);
+    
     setInputValue('');
     setIsTyping(true);
     
-    // Simulate CrewAI processing steps for UX transparency
     const statusSequence = [
       { text: "🧠 Cognitive Tracker mapping logic...", delay: 500 },
       { text: "⚖️ Verifying against MiRAGE vectors...", delay: 2000 },
@@ -74,13 +63,23 @@ export default function FloatingCoPilot() {
     });
 
     try {
-      const response = await axios.post('http://localhost:8000/api/analyze-response', {
+      const questionId = useStore.getState().currentQuestionId;
+      const category = useStore.getState().currentQuestionCategory;
+      
+      const payload = {
         student_id: studentId,
         user_query: userMessage.content,
         current_context: currentContext,
-        metadata: getMetadata()()
-      });
+        metadata: getMetadata()(),
+        is_correct: false,
+        is_follow_up: false,
+        follow_up_answers: null,
+        question_id: questionId,
+        category: category
+      };
 
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const response = await axios.post(`${apiUrl}/api/analyze-response`, payload);
       const data = response.data;
       
       const aiMessage = {
@@ -90,13 +89,12 @@ export default function FloatingCoPilot() {
         predictedTopic: data.predicted_topic,
         patternHash: data.pattern_hash
       };
-      
       setMessages(prev => [...prev, aiMessage]);
-      startTracking(); // Reset counters after interaction
+      startTracking(); 
 
     } catch (error) {
       console.error(error);
-      setMessages(prev => [...prev, { role: 'assistant', content: '`[Connection Error]` I am having trouble reaching the API.'}]);
+      setMessages(prev => [...prev, { role: 'assistant', content: '\`[Connection Error]\` I am having trouble reaching the API.'}]);
     } finally {
       setIsTyping(false);
       setAgentStatus('');
@@ -117,7 +115,6 @@ export default function FloatingCoPilot() {
   return (
     <div className="fixed bottom-8 right-8 w-[450px] h-[650px] shadow-2xl glass-panel flex flex-col rounded-3xl overflow-hidden border border-slate-700/60 z-50 animate-in slide-in-from-bottom-5 fade-in duration-300">
       
-      {/* Header */}
       <div className="bg-slate-800/80 p-4 border-b border-slate-700 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-3">
            <div className="w-10 h-10 rounded-full bg-slate-900 border border-slate-700 flex items-center justify-center relative">
@@ -134,12 +131,11 @@ export default function FloatingCoPilot() {
         </button>
       </div>
 
-      {/* Chat Area */}
       <div className="flex-1 overflow-y-auto p-5 scroll-smooth">
         {messages.map((msg, i) => (
-          <ChatBubble key={i} message={msg} onMcqComplete={(isCorrect) => {
-            // Optional: You could append a message from the system here
-          }} />
+          <div key={i}>
+            <ChatBubble message={msg} onMcqComplete={(isCorrect) => {}} />
+          </div>
         ))}
         
         {isTyping && (
@@ -158,7 +154,6 @@ export default function FloatingCoPilot() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Area */}
       <div className="p-4 bg-slate-800/90 border-t border-slate-700 backdrop-blur-xl">
         <form onSubmit={handleSend} className="relative flex items-center">
           <input 
@@ -166,7 +161,7 @@ export default function FloatingCoPilot() {
             value={inputValue}
             onFocus={handleFocus}
             onChange={handleInputChange}
-            placeholder="Explain your logic here..."
+            placeholder="Ask a question..."
             className="w-full bg-slate-900 border border-slate-700 rounded-full py-4 pl-5 pr-14 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all shadow-inner"
           />
           <button 
@@ -178,7 +173,7 @@ export default function FloatingCoPilot() {
           </button>
         </form>
         <p className="text-[10px] text-center text-slate-500 mt-3 font-medium">
-          Powered by CrewAI • MiRAGE Vectors • RL Tracker
+          Powered by CrewAI • MiRAGE Vectors
         </p>
       </div>
     </div>

@@ -1,19 +1,19 @@
 import os
 from dotenv import load_dotenv
-from crewai import Agent
-from langchain_groq import ChatGroq
+from crewai import Agent, LLM
 
 load_dotenv()
 
-# Initialize Groq LLM
+# Initialize Groq LLM using Litellm/CrewAI native wrapper
 api_key = os.environ.get("GROQ_API_KEY")
 if not api_key:
     print("Warning: GROQ_API_KEY is missing from environment variables.")
     # Dummy to prevent crash
-    groq_llm = None
+    groq_llm_70b = None
+    groq_llm_8b = None
 else:
-    groq_llm_70b = ChatGroq(temperature=0.2, model_name="llama3-70b-8192", api_key=api_key)
-    groq_llm_8b = ChatGroq(temperature=0.4, model_name="llama3-8b-8192", api_key=api_key)
+    groq_llm_70b = LLM(model="groq/llama3-70b-8192", api_key=api_key, temperature=0.2)
+    groq_llm_8b = LLM(model="groq/llama3-8b-8192", api_key=api_key, temperature=0.4)
 
 def get_reasoner_agent() -> Agent:
     return Agent(
@@ -46,12 +46,31 @@ def get_tutor_agent() -> Agent:
     )
 
 def get_assessment_architect() -> Agent:
-    """Agent 4: The Assessment Architect generates a Plausible Distractor MCQ."""
     return Agent(
         role='Assessment Architect',
-        goal='Generate a multiple-choice question tailored to test if the student overcame the diagnosed misconception.',
-        backstory='You are an expert psychometrician. You design subtle, plausible distractors that specifically catch common misconceptions.',
-        llm=groq_llm_8b, # 8b is fast enough for structured JSON output
+        goal='Design a single JSON MCQ to quickly test if the student overcame their misconception.',
+        backstory="An expert in psychometrics who builds highly discriminative questions.",
+        verbose=True,
         allow_delegation=False,
-        verbose=True
+        llm=groq_llm_70b
+    )
+
+def get_question_generator_agent() -> Agent:
+    return Agent(
+        role='Dynamic Question Generator',
+        goal='Generate 2 highly logical follow-up multiple choice questions to ensure a student is not just guessing.',
+        backstory="A master interrogator who crafts tricky follow-up questions to expose lucky guessers. Always outputs perfect JSON arrays.",
+        verbose=False,
+        allow_delegation=False,
+        llm=groq_llm_70b
+    )
+
+def get_concept_extractor_agent() -> Agent:
+    return Agent(
+        role='Semantic Concept Extractor',
+        goal='Read a question or text and extract the core underlying educational concepts into a JSON list.',
+        backstory="A precise taxonomist who categorizes knowledge fragments into fundamental concepts.",
+        verbose=False,
+        allow_delegation=False,
+        llm=groq_llm_70b
     )

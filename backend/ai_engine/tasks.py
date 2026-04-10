@@ -1,94 +1,136 @@
 from crewai import Task
-from ai_engine.agents import get_reasoner_agent, get_judge_agent, get_tutor_agent, get_assessment_architect
+from ai_engine.agents import (
+    get_reasoner_agent, 
+    get_judge_agent, 
+    get_tutor_agent, 
+    get_assessment_architect,
+    get_question_generator_agent,
+    get_concept_extractor_agent
+)
 from textwrap import dedent
 
-def get_reasoning_extraction_task(student_query: str, current_context: str) -> Task:
+def get_question_generation_task(core_logic: str) -> Task:
+    """Generate 2 follow-up verification questions when a student answers correctly."""
     return Task(
         description=dedent(f"""
-            Analyze the following student query within its context.
-            Extract the logical or mathematical steps the student took.
+            The student just guessed the right answer using this core logic context:
+            ---
+            {core_logic}
+            ---
+            Generate EXACTLY TWO multiple-choice questions to test if they truly understand this logic or just got lucky.
+            The questions should be subtly tricky.
             
-            Context: {current_context}
-            Student's Query: {student_query}
-            
-            Output a numbered list of their logical progression without judging if it is right or wrong.
+            Return ONLY a raw JSON array of 2 objects. Do not use markdown wrappers like ```json.
+            Format:
+            [
+              {{
+                "question": "The question...?",
+                "options": ["A", "B", "C", "D"],
+                "correct_answer": "B"
+              }}, 
+              ...
+            ]
         """),
-        expected_output="A numbered list of logical steps taken by the student.",
+        expected_output="A raw JSON array containing exactly 2 multiple-choice question objects.",
+        agent=get_question_generator_agent()
+    )
+
+def get_concept_extraction_task(question_content: str) -> Task:
+    """Extract semantic concepts from a question."""
+    return Task(
+        description=dedent(f"""
+            Analyze the following question and break it down into 3-5 core underlying educational concepts.
+            Question:
+            ---
+            {question_content}
+            ---
+            Return ONLY a raw JSON array of strings representing the concepts. No markdown wrappers.
+            Example: ["Lexical Scoping", "Variable Initialization", "Function Return Values"]
+        """),
+        expected_output="A raw JSON array of 3-5 string concepts.",
+        agent=get_concept_extractor_agent()
+    )
+
+def get_reasoning_extraction_task(student_query: str, current_context: str, true_answer: str = "Unknown") -> Task:
+    return Task(
+        description=dedent(f"""
+            Analyze the student's submission and extract their explicit or implicit reasoning process.
+            
+            Context of the Problem/Topic:
+            {current_context}
+
+            The Actual True Answer:
+            {true_answer}
+
+            Student's Output:
+            {student_query}
+
+            Task: Describe precisely *why* the student believes their answer is correct. What logic are they using?
+        """),
+        expected_output="A crisp paragraph detailing the student's step-by-step logical reasoning process.",
         agent=get_reasoner_agent()
     )
 
 def get_misconception_verification_task(vector_results: list) -> Task:
-    # Formatting vector results for prompt
-    vector_results_txt = "\n".join([
-        f"Misconception ID: {r.get('id', 'N/A')}\nTopic: {r.get('topic', 'N/A')}\nFlawed Logic: {r.get('flawed_logic_description', 'N/A')}\nRemedial Strategy: {r.get('remedial_strategy', 'N/A')}"
-        for r in vector_results
-    ])
-    
+    vector_context = "\n".join([f"Topic: {r['topic']}\nFlaw: {r['flawed_logic_description']}\nStrategy: {r['remedial_strategy']}" for r in vector_results])
     return Task(
         description=dedent(f"""
-            Look at the logical trace provided by the Cognitive Logic Tracker.
-            Compare it to these documented known misconceptions retrieved from our database:
+            Compare the student's reasoning (from the Reasoner Agent) against the following scientifically documented misconceptions:
             
-            {vector_results_txt}
+            Database References:
+            {vector_context}
             
-            Which one is the exact match? If none match perfectly, output 'Unique Error'.
-            State your final diagnostic label clearly.
+            Task: Does the student's reasoning map to one of these known misconceptions? Or is it a novel error?
         """),
-        expected_output="A clear diagnostic label mapping to one of the provided misconceptions or 'Unique Error'.",
+        expected_output="A diagnostic conclusion linking the student's logic to a specific misconception topic, or identifying it as novel.",
         agent=get_judge_agent()
     )
 
-def get_contextual_feedback_task(student_id: str, historical_struggle: str, encounter_count: int, predicted_rl_topic: str, guessing_detected: bool = False, vulnerable_future_topics: list = None) -> Task:
+def get_contextual_feedback_task(historical_struggle: str, encounter_count: int, predicted_rl_topic: str, guessing_detected: bool, vulnerable_future_topics: list, weak_concepts: list, true_answer: str = "") -> Task:
+    weakness_str = ", ".join(weak_concepts) if weak_concepts else "None"
+    topics_str = ", ".join(vulnerable_future_topics) if vulnerable_future_topics else "None"
     
-    guessing_context = ""
-    if guessing_detected:
-        guessing_context = "The metadata from the frontend shows high hesitation (the student likely completely guessed this answer, even if they got it correct). Explicitly tell them: 'You got this right, but I noticed you hesitated and switched answers. Let's walk through your logic just to be sure.'"
-        
-    kg_context = ""
-    if vulnerable_future_topics:
-        topics_str = ", ".join(vulnerable_future_topics)
-        kg_context = f"Based on our Knowledge Graph, because they are struggling with this concept, they are statistically likely to fail at these future topics: {topics_str}. Warn them about this dependency so they take this foundational fix seriously."
-
     return Task(
         description=dedent(f"""
-            You are tutoring Student ID: {student_id}.
-            They have just made a conceptual error as diagnosed by the Diagnostic Verifier (or guessed the right answer).
+            Generate a personalized, Socratic feedback response for the student.
             
-            CRITICAL CONTEXT:
-            Looking at their history, they have struggled with '{historical_struggle}' {encounter_count} times before.
-            Our predictive model suggests their fundamental weakness right now might actually be: '{predicted_rl_topic}'.
-            {guessing_context}
-            {kg_context}
+            Important Context provided by other systems:
+            - Their historical struggle: {historical_struggle} (encountered {encounter_count} times)
+            - Student's explicitly flagged Weak Concepts: {weakness_str}
+            - Our ML model predicts they are fundamentally failing here: {predicted_rl_topic}
+            - Potential downstream failures if this isn't fixed: {topics_str}
+            - Guessing detected by UI telemetry: {guessing_detected}
+            - The true correct answer is: {true_answer}
             
-            YOUR TASK:
-            Write a supportive, Socratic response in Markdown.
-            1. Do NOT give them the final answer.
-            2. Explicitly draw a connection between their current mistake and their past struggle with '{historical_struggle}' to show them they are repeating a pattern.
-            3. Address the potential fundamental weakness '{predicted_rl_topic}'.
-            4. If guessing was detected, or future vulnerabilities identified, address them as instructed in the CRITICAL CONTEXT.
-            5. Ask ONE guiding question to help them fix the logic.
+            Task Guidelines:
+            1. Synthesize the diagnosis from the Judge Agent.
+            2. If 'Guessing Detected' is True, challenge them! "You got the right final state, but I noticed you hesitated and switched answers. Let's walk through your logic."
+            3. Do NOT just give the answer directly. Guide them by explicitly combining their 'Weak Concepts', their 'historical struggle' and the 'True Answer' to formulate your final explanation.
+            4. Make them feel seen by acknowledging their weak concepts.
+            5. Use engaging Markdown formatting.
         """),
-        expected_output="A compassionate, Socratic response in Markdown referencing their past struggles, future vulnerabilities, and asking a guiding question.",
+        expected_output="A well-formatted Markdown response acting as an empathetic, Socratic AI tutor.",
         agent=get_tutor_agent()
     )
 
-def get_mcq_generation_task() -> Task:
+def get_architect_mcq_task(predicted_rl_topic: str) -> Task:
     return Task(
-        description=dedent("""
-            Based on the conceptual error the student just made and the feedback provided by the Tutor, generate a "Plausible Distractor" MCQ specifically tailored to the diagnosed misconception.
+        description=dedent(f"""
+            Generate a single verification multiple-choice question to test if the student has overcome the predicted root weakness: {predicted_rl_topic}.
+            You must generate 1 correct option and 3 plausible distractors that represent common ways a student might still hold the misconception.
             
-            You must return ONLY a JSON object exactly matching this schema:
-            {
-              "question": "The question text",
-              "correct_answer": "The correct answer text",
-              "distractors": [
-                {
-                  "option": "A plausible distractor option",
-                  "mapped_misconception_id": "a-uuid-or-slug"
-                }
-              ]
-            }
-            Do not include any explanation or markdown formatting like ```json. Return pure JSON.
+            CRITICAL: Return ONLY a raw, pure JSON object describing the question. Absolutely NO markdown block decorators (do not output ```json ... ```) and NO other text.
+            Schema:
+            {{
+                "question": "The question content here?",
+                "correct_answer": "The definitively correct option",
+                "distractors": [
+                    {{
+                        "option": "A distractor answer",
+                        "mapped_misconception_id": "specific misconception identifier string"
+                    }}
+                ]
+            }}
         """),
         expected_output="A JSON object matching the required MCQ schema.",
         agent=get_assessment_architect()

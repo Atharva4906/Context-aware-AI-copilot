@@ -12,6 +12,9 @@ class AnalyzeRequest(BaseModel):
     current_context: str
     question_id: Optional[str] = None
     category: Optional[str] = None
+    is_correct: bool = False
+    is_follow_up: bool = False
+    follow_up_answers: Optional[str] = None
     metadata: Optional[InteractionMetadata] = None
 
 class Distractor(BaseModel):
@@ -24,8 +27,10 @@ class MCQ(BaseModel):
     distractors: List[Distractor]
 
 class AnalyzeResponse(BaseModel):
-    feedback: str
-    mcq: MCQ
+    needs_verification: bool = False
+    follow_up_questions: Optional[List[dict]] = None
+    feedback: Optional[str] = None
+    mcq: Optional[dict] = None
     # Debug/Diagnostic data below (optional, but good for UI transparency)
     predicted_topic: Optional[str] = None
     pattern_hash: Optional[str] = None
@@ -64,3 +69,10 @@ class HistoryItemModel(BaseModel):
 
 class HistoryResponse(BaseModel):
     history: List[HistoryItemModel]
+
+class ConceptRequest(BaseModel):
+    question_content: str
+
+class WeakConceptRequest(BaseModel):
+    student_id: str
+    concepts: List[str]

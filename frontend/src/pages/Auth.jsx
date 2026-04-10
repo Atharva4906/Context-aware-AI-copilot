@@ -20,15 +20,14 @@ export default function Auth() {
     setError('');
     
     try {
+      const hackathon_uuid = '0e66f464-6255-4730-8429-ee14e5ef9bc7';
       if (isLogin) {
         // Mock API call for Login
-        // In a real hackathon MVP without the full backend yet, we can mock it 
-        // to return a dummy user if the backend route isn't up
-        login({ id: 'dummy-123', name: email.split('@')[0], role: role });
+        login({ id: hackathon_uuid, name: email.split('@')[0], role: role });
         navigate(role === 'educator' ? '/admin' : '/dashboard');
       } else {
         // Mock Register
-        login({ id: 'dummy-123', name: name, role: role });
+        login({ id: hackathon_uuid, name: name, role: role });
         navigate(role === 'educator' ? '/admin' : '/dashboard');
       }
     } catch (err) {

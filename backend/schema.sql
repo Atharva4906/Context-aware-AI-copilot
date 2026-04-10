@@ -16,7 +16,11 @@ CREATE TABLE IF NOT EXISTS common_misconceptions (
 CREATE TABLE IF NOT EXISTS users (
     student_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
-    learning_profile JSONB DEFAULT '{}'::jsonb
+    email TEXT UNIQUE,
+    password_hash TEXT,
+    role TEXT CHECK (role IN ('student', 'educator')) DEFAULT 'student',
+    learning_profile JSONB DEFAULT '{}'::jsonb,
+    weak_concepts TEXT[] DEFAULT '{}'
 );
 
 -- 3. The RL Tracker

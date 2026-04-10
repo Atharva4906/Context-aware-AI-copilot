@@ -4,9 +4,12 @@ import { useStore } from '../store/useStore';
 import Sidebar from '../components/Sidebar';
 import LearningHub from '../components/LearningHub';
 import FloatingCoPilot from '../components/FloatingCoPilot';
+import StudentStatsOverview from '../components/StudentStatsOverview';
+import StudentHistory from '../components/StudentHistory';
 
 export default function StudentDashboard() {
   const user = useStore((state) => state.user);
+  const currentView = useStore((state) => state.currentView);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -26,7 +29,10 @@ export default function StudentDashboard() {
       </div>
 
       <Sidebar />
-      <LearningHub />
+      {currentView === 'Learning Paths' && <LearningHub />}
+      {currentView === 'Dashboard' && <StudentStatsOverview />}
+      {currentView === 'Performance' && <StudentHistory />}
+      
       <FloatingCoPilot />
     </div>
   );
