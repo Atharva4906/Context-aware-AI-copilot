@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useStore } from '../store/useStore';
-import { Play, Code, CheckCircle, FileText } from 'lucide-react';
+import { Play, Code, CheckCircle, FileText, BrainCircuit } from 'lucide-react';
 
 export default function LearningHub() {
   const setContext = useStore((state) => state.setContext);
@@ -78,11 +78,21 @@ D) It prompts the user for input.
               <h4 className="text-lg font-semibold text-white mb-4">What happens when this code is executed?</h4>
               <div className="space-y-3">
                 {['A) It prints the total calculated amount.', "B) It throws a NameError because 'total' is not defined in the global scope.", "C) It prints 0.", "D) It prompts the user for input."].map((opt, i) => (
-                  <label key={i} className="flex items-start gap-4 p-4 rounded-xl cursor-not-allowed bg-slate-900/50 border border-slate-700 hover:border-cyan-500/50 transition-colors opacity-80">
-                    <input type="radio" disabled name="quiz" className="mt-1 flex-shrink-0" />
+                  <label key={i} className="flex items-start gap-4 p-4 rounded-xl hover:bg-slate-800 border border-slate-700 hover:border-blue-500/50 transition-colors cursor-pointer">
+                    <input type="radio" onClick={() => useStore.getState().setTriggerDiagnosis(true)} name="quiz" className="mt-1 flex-shrink-0" />
                     <span className="text-slate-300">{opt}</span>
                   </label>
                 ))}
+              </div>
+              <div className="mt-6 border-t border-slate-700/50 pt-6 flex justify-between items-center">
+                <p className="text-sm text-slate-400">Not sure why you got it wrong?</p>
+                <button 
+                  onClick={() => useStore.getState().setTriggerDiagnosis(true)}
+                  className="px-6 py-2.5 bg-gradient-to-r from-purple-500 to-indigo-600 rounded-xl text-white font-medium shadow-lg hover:scale-105 transition-transform flex items-center gap-2"
+                >
+                  <BrainCircuit className="w-5 h-5" />
+                  Diagnose Misconception
+                </button>
               </div>
             </div>
           </div>

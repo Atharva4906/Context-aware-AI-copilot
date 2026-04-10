@@ -22,6 +22,17 @@ export default function FloatingCoPilot() {
   const incrementSwitch = useStore((state) => state.incrementSwitch);
   const incrementBackspace = useStore((state) => state.incrementBackspace);
   const startTracking = useStore((state) => state.startTracking);
+  const triggerDiagnosis = useStore((state) => state.triggerDiagnosis);
+  const setTriggerDiagnosis = useStore((state) => state.setTriggerDiagnosis);
+
+  useEffect(() => {
+    if (triggerDiagnosis) {
+      setIsOpen(true);
+      setTriggerDiagnosis(false); // Reset it immediately
+      // Optionally pre-fill or directly trigger a diagnosis request
+      setInputValue("I'm not sure why I got this wrong. Can you diagnose my misconception?");
+    }
+  }, [triggerDiagnosis, setTriggerDiagnosis]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

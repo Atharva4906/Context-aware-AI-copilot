@@ -1,9 +1,14 @@
 import { create } from 'zustand';
 
 export const useStore = create((set) => ({
-  studentId: 'student-uuid-123', // Hardcoded for hackathon
+  user: null, // { id: 'uuid', role: 'student' | 'educator', name: 'Atharva' }
+  studentId: 'student-uuid-123', // Keeping as fallback or update dynamically
+  login: (userData) => set({ user: userData, studentId: userData.id }),
+  logout: () => set({ user: null }),
   currentContext: '',
   setContext: (context) => set({ currentContext: context }),
+  triggerDiagnosis: false,
+  setTriggerDiagnosis: (val) => set({ triggerDiagnosis: val }),
   
   // Interaction Metadata for Hesitation Detector
   startTime: null,
