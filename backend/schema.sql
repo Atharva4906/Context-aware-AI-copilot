@@ -62,3 +62,21 @@ CREATE TABLE IF NOT EXISTS curriculum_knowledge_graph (
     dependent_topic TEXT NOT NULL,
     UNIQUE (prerequisite_topic, dependent_topic)
 );
+
+-- 7. Platform Questions
+-- Stores the questions across various categories
+CREATE TABLE IF NOT EXISTS questions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    category TEXT NOT NULL CHECK (category IN ('Math', 'Physics', 'English', 'Coding')),
+    content TEXT NOT NULL,
+    options JSONB, -- JSON array if MCQ, null if conversational
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 8. Alter Interaction Logs to support history dashboard
+-- Add columns to link interactions to specific questions and track resolution
+ALTER TABLE interaction_logs 
+ADD COLUMN IF NOT EXISTS question_id UUID REFERENCES questions(id) ON DELETE SET NULL,
+ADD COLUMN IF NOT EXISTS category TEXT,
+ADD COLUMN IF NOT EXISTS is_resolved BOOLEAN DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS predicted_misconception TEXT;
