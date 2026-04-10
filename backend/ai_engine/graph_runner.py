@@ -5,15 +5,17 @@ Replaces crew_runner.py entirely.
 Three graphs:
   1. concept_graph        – single-node concept extraction
   2. verification_graph   – single-node follow-up question generation
-  3. diagnostic_graph     – reasoner → judge → (tutor ‖ architect) [parallel]
+    3. diagnostic_graph     – reasoner → explanation_analyzer → judge → tutor → architect
 """
 from langgraph.graph import StateGraph, END
+from typing import Optional
 
 from ai_engine.graph_states import ConceptState, VerificationState, DiagnosticState
 from ai_engine.graph_nodes import (
     concept_extractor_node,
     question_generator_node,
     reasoner_node,
+    explanation_analyzer_node,
     judge_node,
     tutor_node,
     architect_node,
@@ -38,12 +40,14 @@ verification_graph = _verify_builder.compile()
 # ─── 3. Diagnostic graph  (sequential to avoid fan-out edge error) ───────────
 _diag_builder = StateGraph(DiagnosticState)
 _diag_builder.add_node("reasoner",  reasoner_node)
+_diag_builder.add_node("explanation_analyzer", explanation_analyzer_node)
 _diag_builder.add_node("judge",     judge_node)
 _diag_builder.add_node("tutor",     tutor_node)
 _diag_builder.add_node("architect", architect_node)
 
 _diag_builder.set_entry_point("reasoner")
-_diag_builder.add_edge("reasoner", "judge")
+_diag_builder.add_edge("reasoner", "explanation_analyzer")
+_diag_builder.add_edge("explanation_analyzer", "judge")
 _diag_builder.add_edge("judge", "tutor")
 _diag_builder.add_edge("tutor", "architect")
 _diag_builder.add_edge("architect", END)
@@ -73,9 +77,10 @@ def run_diagnostic_crew(
     encounter_count: int,
     predicted_rl_topic: str,
     guessing_detected: bool = False,
-    vulnerable_future_topics: list = None,
-    weak_concepts: list = None,
+    vulnerable_future_topics: Optional[list] = None,
+    weak_concepts: Optional[list] = None,
     true_answer: str = "Unknown",
+    student_explanation: str = "",
 ) -> tuple:
     """
     Executes the multi-node diagnostic graph.
@@ -93,8 +98,10 @@ def run_diagnostic_crew(
         "vulnerable_future_topics": vulnerable_future_topics or [],
         "weak_concepts": weak_concepts or [],
         "true_answer": true_answer,
+        "student_explanation": student_explanation or "",
         # intermediate / output fields — LangGraph needs them pre-seeded
         "reasoning_extracted": "",
+        "explanation_diagnosis": "",
         "misconception_verdict": "",
         "feedback_text": "",
         "mcq_dict": {},

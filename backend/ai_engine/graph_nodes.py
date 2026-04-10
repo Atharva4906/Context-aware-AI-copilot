@@ -216,6 +216,8 @@ def question_generator_node(state: VerificationState) -> dict:
 
 # ─── Diagnostic graph nodes ──────────────────────────────────────────────────
 def reasoner_node(state: DiagnosticState) -> dict:
+    student_explanation = (state.get("student_explanation") or "").strip()
+    explanation_block = f"\n\nStudent Explanation (optional):\n{student_explanation}" if student_explanation else ""
     system = (
         "You are the Cognitive Logic Tracker. "
         "Map the student's step-by-step reasoning without judging right or wrong. "
@@ -232,6 +234,7 @@ def reasoner_node(state: DiagnosticState) -> dict:
 
         Student's Output:
         {state["user_query"]}
+        {explanation_block}
 
         Task: Describe precisely *why* the student believes their answer is correct. What logic are they using?
     """)
@@ -239,12 +242,49 @@ def reasoner_node(state: DiagnosticState) -> dict:
     return {"reasoning_extracted": result}
 
 
+def explanation_analyzer_node(state: DiagnosticState) -> dict:
+    student_explanation = (state.get("student_explanation") or "").strip()
+    if not student_explanation:
+        return {"explanation_diagnosis": ""}
+
+    system = (
+        "You are an Explanation Misconception Analyzer. "
+        "Evaluate whether a student's explanation is conceptually sound and aligned with the problem context. "
+        "Be concise and evidence-based."
+    )
+    user = dedent(f"""
+        Analyze the student's optional explanation and identify misconception signals.
+
+        Question / Problem Context:
+        {state["current_context"]}
+
+        Student Submitted Answer:
+        {state["user_query"]}
+
+        Student Explanation:
+        {student_explanation}
+
+        Guessing signal from metadata:
+        {state.get("guessing_detected", False)}
+
+        Return a compact diagnosis with this exact structure:
+        - Explanation Soundness: <sound / partially sound / unsound>
+        - Misconceptions Detected: <comma-separated concepts OR None>
+        - Evidence: <1-2 short lines citing the explanation>
+        - Corrective Direction: <how to fix reasoning in 1-2 lines>
+    """)
+    result = _call(groq_llm_70b, system, user)
+    return {"explanation_diagnosis": result}
+
+
 def judge_node(state: DiagnosticState) -> dict:
     vector_results = state.get("vector_results", [])
+    explanation_diagnosis = (state.get("explanation_diagnosis") or "").strip()
     vector_context = "\n".join([
         f"Topic: {r['topic']}\nFlaw: {r['flawed_logic_description']}\nStrategy: {r['remedial_strategy']}"
         for r in vector_results
     ])
+    explanation_context = explanation_diagnosis if explanation_diagnosis else "Not provided"
     system = (
         "You are the Diagnostic Verifier — a strictly mathematically precise judge. "
         "You prevent hallucinations by ensuring the student's error perfectly aligns with a known, documented misconception."
@@ -255,10 +295,14 @@ def judge_node(state: DiagnosticState) -> dict:
         Student Reasoning:
         {state["reasoning_extracted"]}
 
+        Student Explanation Diagnosis:
+        {explanation_context}
+
         Database References:
         {vector_context}
 
         Task: Does the student's reasoning map to one of these known misconceptions? Or is it a novel error?
+        If explanation diagnosis is present, use it to strengthen or weaken your confidence but keep reasoning evidence as primary.
         Provide a diagnostic conclusion.
     """)
     result = _call(groq_llm_70b, system, user)
@@ -268,17 +312,25 @@ def judge_node(state: DiagnosticState) -> dict:
 def tutor_node(state: DiagnosticState) -> dict:
     weakness_str = ", ".join(state.get("weak_concepts", [])) or "None"
     topics_str   = ", ".join(state.get("vulnerable_future_topics", [])) or "None"
+    student_explanation = (state.get("student_explanation") or "").strip()
+    explanation_diagnosis = (state.get("explanation_diagnosis") or "").strip()
+    explanation_present = "Yes" if student_explanation else "No"
     system = (
         "You are a Context-Aware Socratic Tutor — empathetic, Socratic, and highly personalized. "
-        "You never just give the answer. You guide through questions and analogies based on the student's history."
+        "You guide through questions and analogies based on the student's history, while still giving closure when needed."
     )
     user = dedent(f"""
         Generate a personalized, Socratic feedback response for the student.
+
+        Problem Context:
+        {state["current_context"]}
 
         Important Context provided by other systems:
         - Their historical struggle: {state["historical_struggle"]} (encountered {state["encounter_count"]} times)
         - Student's explicitly flagged Weak Concepts: {weakness_str}
         - Diagnostic verdict from Judge Agent: {state["misconception_verdict"]}
+        - Optional explanation provided by student: {explanation_present}
+        - Explanation diagnosis: {explanation_diagnosis or "Not provided"}
         - Our ML model predicts they are fundamentally failing here: {state["predicted_rl_topic"]}
         - Potential downstream failures if this isn't fixed: {topics_str}
         - Guessing detected by UI telemetry: {state["guessing_detected"]}
@@ -287,9 +339,11 @@ def tutor_node(state: DiagnosticState) -> dict:
         Task Guidelines:
         1. Synthesize the diagnosis from the misconception_verdict above.
         2. If 'Guessing Detected' is True, challenge them: "You got the right final state, but I noticed you hesitated and switched answers. Let's walk through your logic."
-        3. Do NOT just give the answer directly. Guide them by explicitly combining their 'Weak Concepts', their 'historical struggle' and the 'True Answer' to form your final explanation.
+        3. Guide them by explicitly combining their 'Weak Concepts', their 'historical struggle' and the 'True Answer' to form your final explanation.
         4. Make them feel seen by acknowledging their weak concepts.
         5. Use engaging Markdown formatting.
+        6. If the student's answer/logic is incorrect based on the verdict, append a `## Final Answer` section at the end with a 1-2 step mini-solution and the exact numeric/factual answer.
+        7. If and only if an explanation was provided and no misconception is found in that explanation, include a brief `## Explanation Verified` section.
     """)
     result = _call(groq_llm_70b, system, user)
     return {"feedback_text": result}

@@ -28,9 +28,11 @@ class DiagnosticState(TypedDict):
     vulnerable_future_topics: List[str]
     weak_concepts: List[str]
     true_answer: str
+    student_explanation: str
 
     # ---- Intermediate outputs ----
     reasoning_extracted: str          # set by reasoner_node
+    explanation_diagnosis: str        # set by explanation_analyzer_node
     misconception_verdict: str        # set by judge_node
 
     # ---- Final outputs (run in parallel) ----
