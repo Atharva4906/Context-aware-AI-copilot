@@ -73,6 +73,16 @@ agent_response	Text	The final Socratic feedback provided by the Co-Pilot.
 created_at	Timestamp	Used to feed the most recent conversation context to the LLM.
 2.4 The RL State Update Loop (How it learns)
 The database is not static; it acts as a state machine for the student's learning journey.
+
+### 5. Educator Command Center & Misconception Clustering
+If a single student fails to grasp a concept, it's a student issue. If 80% of a cohort fails to grasp it, it's a pedagogical issue. 
+- **Admin Dashboard Tracking**: Educators have a dedicated dashboard to see real-time updates of which students hold what misconceptions.
+- **K-Means / Semantic Clustering Algorithm**: Through the backend API, the system automatically clusters students together based on shared cognitive gaps (e.g. Group A: struggling with 'Variable Scope', Group B: fundamental 'Loop' misunderstanding) allowing the educator to launch targeted group interventions.
+
+### 6. Student-Led Resolution
+The system shifts responsibility. Students can view their historical, unresolved misconceptions and actively trigger challenges (via the "Diagnose Misconception" button) to prove to the AI they have overcome their weaknesses, actively managing their own cognitive health.
+
+## Deep Dive: How the RL Updates Confidence
 1.	Trigger Event: A student submits an answer. The Vector Engine (common_misconceptions) identifies it as Misconception X.
 2.	State Check: FastAPI checks student_misconception_state.
 o	If no record exists, it inserts a new row with status = 'unresolved' and encounter_count = 1.
