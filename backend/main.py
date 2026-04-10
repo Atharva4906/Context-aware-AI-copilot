@@ -1,14 +1,19 @@
-from fastapi import FastAPI, HTTPException
+from typing import Optional
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from backend.models.schemas import (
+from models.schemas import (
     AnalyzeRequest, 
     AnalyzeResponse, 
     RLFeedbackRequest, 
-    RLFeedbackResponse
+    RLFeedbackResponse,
+    QuestionModel,
+    DashboardStatsResponse,
+    HistoryResponse,
+    HistoryItemModel
 )
-from backend.database.supabase_client import get_supabase_client, get_student_history, log_interaction
-from backend.ai_engine.rl_engine import generate_pattern_hash, get_rl_prediction, update_rl_policy, get_knowledge_graph_predictions
-from backend.ai_engine.crew_runner import run_diagnostic_crew
+from database.supabase_client import get_supabase_client, get_student_history, log_interaction
+from ai_engine.rl_engine import generate_pattern_hash, get_rl_prediction, update_rl_policy, get_knowledge_graph_predictions
+from ai_engine.crew_runner import run_diagnostic_crew
 
 app = FastAPI(title="Context-Aware AI Co-Pilot API")
 
@@ -83,10 +88,17 @@ async def analyze_response(request: AnalyzeRequest):
             vulnerable_future_topics=vulnerable_future_topics
         )
 
-        # 5. Log interaction to memory
-        log_interaction(student_id, user_query, feedback_text)
+        # 6. Log interaction to memory WITH question id and category
+        log_interaction(
+            student_id=student_id, 
+            user_query=user_query, 
+            agent_response=feedback_text,
+            question_id=request.question_id,
+            category=request.category,
+            predicted_misconception=predicted_rl_topic
+        )
 
-        # 6. Stream/Return Response
+        # 7. Stream/Return Response
         return AnalyzeResponse(
             feedback=feedback_text,
             mcq=mcq_dict,
@@ -112,10 +124,75 @@ async def submit_rl_feedback(request: RLFeedbackRequest):
             student_feedback=request.student_feedback
         )
         
+        # Also mark the interaction log as resolved if it was a positive feedback
+        if request.student_feedback:
+            try:
+                # Mark latest matching misconception as resolved
+                res = supabase.table('interaction_logs') \
+                    .select('log_id').eq('student_id', request.student_id) \
+                    .eq('predicted_misconception', request.suggested_topic) \
+                    .order('created_at', desc=True).limit(1).execute()
+                if res.data:
+                    supabase.table('interaction_logs').update({'is_resolved': True}).eq('log_id', res.data[0]['log_id']).execute()
+            except Exception as inner_e:
+                print(f"Error updating log resolution: {inner_e}")
+
         return RLFeedbackResponse(
             status="success",
             new_confidence_score=new_q_value
         )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/questions", response_model=list[QuestionModel])
+async def get_questions(category: Optional[str] = Query(None)):
+    """Fetch questions, optionally filtered by category."""
+    try:
+        query = supabase.table('questions').select('*')
+        if category:
+            query = query.eq('category', category)
+        res = query.execute()
+        return res.data if res.data else []
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/student/{student_id}/dashboard", response_model=DashboardStatsResponse)
+async def get_dashboard(student_id: str):
+    """Fetch macro statistics for the Dashboard."""
+    try:
+        res = supabase.table('interaction_logs').select('category, is_resolved').eq('student_id', student_id).execute()
+        logs = res.data if res.data else []
+        
+        total = len(logs)
+        resolved = sum(1 for log in logs if log['is_resolved'])
+        active = total - resolved
+        
+        category_counts = {}
+        for log in logs:
+            cat = log.get('category')
+            if cat:
+                if not log.get('is_resolved'):  # count unresolved
+                    category_counts[cat] = category_counts.get(cat, 0) + 1
+        
+        most_struggled = "None yet"
+        if category_counts:
+            most_struggled = max(category_counts, key=category_counts.get)
+            
+        return DashboardStatsResponse(
+            total_questions_answered=total,
+            active_misconceptions=active,
+            resolved_misconceptions=resolved,
+            most_struggled_category=most_struggled
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/student/{student_id}/history", response_model=HistoryResponse)
+async def get_history(student_id: str):
+    """Fetch chronological interaction history and resolution state."""
+    try:
+        res = supabase.table('interaction_logs').select('*').eq('student_id', student_id).order('created_at', desc=True).execute()
+        return HistoryResponse(history=res.data if res.data else [])
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
