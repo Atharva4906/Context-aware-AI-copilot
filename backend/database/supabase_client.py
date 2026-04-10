@@ -31,13 +31,17 @@ def get_student_history(student_id: str):
         print(f"Error fetching student history: {e}")
         return []
 
-def log_interaction(student_id: str, user_query: str, agent_response: str):
-    """Log the conversation."""
+def log_interaction(student_id: str, user_query: str, agent_response: str, question_id: str = None, category: str = None, predicted_misconception: str = None):
+    """Log the conversation with question context."""
     try:
         supabase.table('interaction_logs').insert({
             'student_id': student_id,
             'user_query': user_query,
-            'agent_response': agent_response
+            'agent_response': agent_response,
+            'question_id': question_id,
+            'category': category,
+            'predicted_misconception': predicted_misconception,
+            'is_resolved': False
         }).execute()
     except Exception as e:
         print(f"Error logging interaction: {e}")

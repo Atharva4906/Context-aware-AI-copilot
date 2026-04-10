@@ -10,6 +10,8 @@ class AnalyzeRequest(BaseModel):
     student_id: str
     user_query: str
     current_context: str
+    question_id: Optional[str] = None
+    category: Optional[str] = None
     metadata: Optional[InteractionMetadata] = None
 
 class Distractor(BaseModel):
@@ -37,3 +39,28 @@ class RLFeedbackRequest(BaseModel):
 class RLFeedbackResponse(BaseModel):
     status: str
     new_confidence_score: float
+
+class QuestionModel(BaseModel):
+    id: str
+    category: str
+    content: str
+    options: Optional[List[str]] = None
+
+class DashboardStatsResponse(BaseModel):
+    total_questions_answered: int
+    active_misconceptions: int
+    resolved_misconceptions: int
+    most_struggled_category: str
+
+class HistoryItemModel(BaseModel):
+    log_id: str
+    question_id: Optional[str]
+    category: Optional[str]
+    user_query: str
+    agent_response: str
+    is_resolved: bool
+    predicted_misconception: Optional[str]
+    created_at: str
+
+class HistoryResponse(BaseModel):
+    history: List[HistoryItemModel]
