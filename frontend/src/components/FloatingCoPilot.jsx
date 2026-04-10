@@ -18,7 +18,6 @@ export default function FloatingCoPilot() {
   
   const studentId = useStore((state) => state.studentId);
   const currentContext = useStore((state) => state.currentContext);
-  const getMetadata = useStore((state) => state.getMetadata);
   const incrementSwitch = useStore((state) => state.incrementSwitch);
   const incrementBackspace = useStore((state) => state.incrementBackspace);
   const startTracking = useStore((state) => state.startTracking);
@@ -65,12 +64,19 @@ export default function FloatingCoPilot() {
     try {
       const questionId = useStore.getState().currentQuestionId;
       const category = useStore.getState().currentQuestionCategory;
+      const tracking = useStore.getState();
+      const metadata = {
+        time_taken_seconds: tracking.startTime ? Math.floor((Date.now() - tracking.startTime) / 1000) : 0,
+        switch_count: tracking.switchCount || 0,
+        backspace_count: tracking.backspaceCount || 0,
+      };
       
       const payload = {
         student_id: studentId,
         user_query: userMessage.content,
+        student_explanation: userMessage.content,
         current_context: currentContext,
-        metadata: getMetadata()(),
+        metadata,
         is_correct: false,
         is_follow_up: false,
         follow_up_answers: null,

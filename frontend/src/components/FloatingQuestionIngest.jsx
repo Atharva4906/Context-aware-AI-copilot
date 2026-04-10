@@ -45,6 +45,7 @@ export default function FloatingQuestionIngest() {
   const [needsVerification, setNeedsVerification] = useState(false);
   const [followUpQuestions, setFollowUpQuestions] = useState([]);
   const [followUpAnswers, setFollowUpAnswers] = useState({});
+  const [studentExplanation, setStudentExplanation] = useState('');
   const [tutorFeedback, setTutorFeedback] = useState(null);
   const [patternHash, setPatternHash] = useState(null);
   const [predictedTopic, setPredictedTopic] = useState(null);
@@ -158,6 +159,7 @@ export default function FloatingQuestionIngest() {
     setNeedsVerification(false);
     setFollowUpQuestions([]);
     setFollowUpAnswers({});
+    setStudentExplanation('');
     setTutorFeedback(null);
     setPatternHash(null);
     setPredictedTopic(null);
@@ -235,6 +237,12 @@ export default function FloatingQuestionIngest() {
     if (!parsed) return;
     setIsSubmitting(true);
     try {
+      const tracking = useStore.getState();
+      const metadata = {
+        time_taken_seconds: tracking.startTime ? Math.floor((Date.now() - tracking.startTime) / 1000) : 0,
+        switch_count: tracking.switchCount || 0,
+        backspace_count: tracking.backspaceCount || 0,
+      };
       const isCorrect = isFollowUpSubmit ? false : (selectedOptIndex === correctIndex);
       const userText = isFollowUpSubmit ? '[Submitted verification answers]' : parsed.options?.[selectedOptIndex] || '';
 
@@ -242,10 +250,11 @@ export default function FloatingQuestionIngest() {
         student_id: studentId,
         user_query: userText,
         current_context: parsed.content,
-        metadata: {},
+        metadata,
         is_correct: isCorrect,
         is_follow_up: isFollowUpSubmit,
         follow_up_answers: isFollowUpSubmit ? JSON.stringify(followUpAnswers) : null,
+        student_explanation: studentExplanation.trim() || null,
         question_id: savedQuestionId,
         category: parsed.category
       };
@@ -430,6 +439,18 @@ export default function FloatingQuestionIngest() {
                         <span>{opt}</span>
                       </label>
                     ))}
+                    <div className="mt-4">
+                      <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
+                        Optional: Explain your reasoning
+                      </label>
+                      <textarea
+                        value={studentExplanation}
+                        onChange={(event) => setStudentExplanation(event.target.value)}
+                        rows={3}
+                        placeholder="How did you solve this?"
+                        className="w-full rounded-lg border border-white/10 bg-neutral-900 px-3 py-2 text-sm text-neutral-200 placeholder-neutral-500 outline-none focus:border-blue-500/40"
+                      />
+                    </div>
                     <button
                       onClick={() => handleSubmit(false)}
                       disabled={selectedOptIndex === null || isSubmitting || correctIndex === null}
@@ -473,6 +494,18 @@ export default function FloatingQuestionIngest() {
                   </div>
                 </div>
               ))}
+              <div className="mt-1">
+                <label className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-emerald-300/80">
+                  Optional: Explain your final reasoning
+                </label>
+                <textarea
+                  value={studentExplanation}
+                  onChange={(event) => setStudentExplanation(event.target.value)}
+                  rows={3}
+                  placeholder="Share how you reasoned through the final answer"
+                  className="w-full rounded-lg border border-white/10 bg-neutral-900 px-3 py-2 text-sm text-neutral-200 placeholder-neutral-500 outline-none focus:border-emerald-500/40"
+                />
+              </div>
               <button
                 onClick={() => handleSubmit(true)}
                 disabled={Object.keys(followUpAnswers).length < followUpQuestions.length || isSubmitting}

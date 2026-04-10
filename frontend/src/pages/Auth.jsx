@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
-import { BrainCircuit, BookOpen, User, Lock, Mail } from 'lucide-react';
+import { BrainCircuit, User, Lock, Mail, Sparkles } from 'lucide-react';
 import axios from 'axios';
 
 export default function Auth() {
@@ -35,101 +35,126 @@ export default function Auth() {
     }
   };
 
-  return (
-    <div className="h-screen w-full flex items-center justify-center bg-slate-900 relative overflow-hidden">
-      {/* Background blur */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40rem] h-[40rem] bg-blue-600/20 rounded-full blur-[120px] pointer-events-none"></div>
-      <div className="absolute bottom-[-10%] right-[-10%] w-[30rem] h-[30rem] bg-cyan-500/20 rounded-full blur-[100px] pointer-events-none"></div>
+  const isStudent = role === 'student';
 
-      <div className="glass-panel w-full max-w-md p-8 rounded-3xl z-10 animate-in fade-in zoom-in-95 duration-500">
+  return (
+    <div className="h-screen w-full flex items-center justify-center bg-[#0a0a0a] text-neutral-200 relative overflow-hidden font-sans selection:bg-blue-500/30">
+      
+      {/* ── Advanced Minimalist Background ── */}
+      <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
+        {/* Subtle top glow matching the role */}
+        <div className={`absolute top-0 left-1/2 -translate-x-1/2 w-[80vw] h-[500px] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] ${isStudent ? 'from-blue-900/20' : 'from-purple-900/20'} via-[#0a0a0a]/0 to-transparent opacity-60 mix-blend-screen transition-colors duration-700`} />
+      </div>
+
+      <div className="w-full max-w-md p-8 md:p-10 bg-[#111113] border border-white/5 rounded-3xl z-10 relative shadow-2xl animate-in fade-in zoom-in-[0.98] duration-500">
         
+        {/* Header */}
         <div className="flex flex-col items-center justify-center text-center space-y-4 mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/30">
-            <BrainCircuit className="w-8 h-8 text-white" />
+          <div className={`w-12 h-12 rounded-xl flex items-center justify-center border transition-colors duration-500 ${isStudent ? 'bg-blue-500/10 border-blue-500/20' : 'bg-purple-500/10 border-purple-500/20'}`}>
+            <BrainCircuit className={`w-6 h-6 ${isStudent ? 'text-blue-400' : 'text-purple-400'}`} />
           </div>
           <div>
-            <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-400">Pragyantra</h1>
-            <p className="text-slate-400 text-sm mt-1">Context-Aware AI Learning</p>
+            <h1 className="text-3xl font-extrabold text-white tracking-tight">Pragyantra</h1>
+            <p className="text-neutral-500 text-sm mt-1.5 font-medium tracking-wide flex items-center justify-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5" /> Context-Aware Engine
+            </p>
           </div>
         </div>
 
-        <div className="flex bg-slate-800/50 p-1 rounded-xl mb-6 border border-slate-700/50">
+        {/* Role Toggle */}
+        <div className="flex bg-[#0a0a0a] p-1.5 rounded-xl mb-8 border border-white/5">
           <button 
             type="button"
             onClick={() => setRole('student')}
-            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${role === 'student' ? 'bg-cyan-500 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
+            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all duration-300 ${
+              isStudent 
+                ? 'bg-[#111113] text-blue-400 border border-white/5 shadow-sm' 
+                : 'text-neutral-500 hover:text-neutral-300 border border-transparent'
+            }`}
           >
             Student
           </button>
           <button 
             type="button"
             onClick={() => setRole('educator')}
-            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${role === 'educator' ? 'bg-purple-500 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
+            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all duration-300 ${
+              !isStudent 
+                ? 'bg-[#111113] text-purple-400 border border-white/5 shadow-sm' 
+                : 'text-neutral-500 hover:text-neutral-300 border border-transparent'
+            }`}
           >
             Educator
           </button>
         </div>
 
+        {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           {!isLogin && (
-            <div className="relative">
-              <User className="absolute left-3 top-3 w-5 h-5 text-slate-500" />
+            <div className="relative group">
+              <User className="absolute left-4 top-3.5 w-5 h-5 text-neutral-600 group-focus-within:text-neutral-400 transition-colors" />
               <input 
                 type="text" 
                 placeholder="Full Name" 
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full bg-slate-900/50 border border-slate-700 rounded-xl py-3 pl-10 pr-4 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all"
+                className={`w-full bg-[#0a0a0a] border border-white/5 rounded-xl py-3.5 pl-12 pr-4 text-sm text-white placeholder-neutral-600 focus:outline-none focus:border-${isStudent ? 'blue' : 'purple'}-500/50 focus:ring-1 focus:ring-${isStudent ? 'blue' : 'purple'}-500/20 transition-all`}
                 required
               />
             </div>
           )}
           
-          <div className="relative">
-            <Mail className="absolute left-3 top-3 w-5 h-5 text-slate-500" />
+          <div className="relative group">
+            <Mail className="absolute left-4 top-3.5 w-5 h-5 text-neutral-600 group-focus-within:text-neutral-400 transition-colors" />
             <input 
               type="email" 
               placeholder="Email Address" 
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-slate-900/50 border border-slate-700 rounded-xl py-3 pl-10 pr-4 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all"
+              className={`w-full bg-[#0a0a0a] border border-white/5 rounded-xl py-3.5 pl-12 pr-4 text-sm text-white placeholder-neutral-600 focus:outline-none focus:border-${isStudent ? 'blue' : 'purple'}-500/50 focus:ring-1 focus:ring-${isStudent ? 'blue' : 'purple'}-500/20 transition-all`}
               required
             />
           </div>
 
-          <div className="relative">
-            <Lock className="absolute left-3 top-3 w-5 h-5 text-slate-500" />
+          <div className="relative group">
+            <Lock className="absolute left-4 top-3.5 w-5 h-5 text-neutral-600 group-focus-within:text-neutral-400 transition-colors" />
             <input 
               type="password" 
               placeholder="Password" 
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-slate-900/50 border border-slate-700 rounded-xl py-3 pl-10 pr-4 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all"
+              className={`w-full bg-[#0a0a0a] border border-white/5 rounded-xl py-3.5 pl-12 pr-4 text-sm text-white placeholder-neutral-600 focus:outline-none focus:border-${isStudent ? 'blue' : 'purple'}-500/50 focus:ring-1 focus:ring-${isStudent ? 'blue' : 'purple'}-500/20 transition-all`}
               required
             />
           </div>
 
-          {error && <p className="text-rose-400 text-xs text-center">{error}</p>}
+          {error && (
+            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs font-medium text-center animate-in fade-in">
+              {error}
+            </div>
+          )}
 
           <button 
             type="submit" 
-            className={`w-full py-3 rounded-xl font-bold text-white transition-all shadow-lg hover:scale-[1.02] ${
-              role === 'student' 
-                ? 'bg-gradient-to-r from-cyan-500 to-blue-600 shadow-cyan-500/20' 
-                : 'bg-gradient-to-r from-purple-500 to-pink-600 shadow-purple-500/20'
+            className={`w-full py-3.5 rounded-xl text-sm font-bold text-white transition-all hover:scale-[1.02] shadow-lg ${
+              isStudent 
+                ? 'bg-blue-600 hover:bg-blue-500 shadow-blue-500/20' 
+                : 'bg-purple-600 hover:bg-purple-500 shadow-purple-500/20'
             }`}
           >
-            {isLogin ? 'Sign In to Dashboard' : 'Create Account'}
+            {isLogin ? 'Access Cognitive Engine' : 'Initialize Profile'}
           </button>
         </form>
 
-        <div className="mt-6 text-center text-sm text-slate-400">
-          {isLogin ? "Don't have an account? " : "Already have an account? "}
+        {/* Footer */}
+        <div className="mt-8 text-center text-sm text-neutral-500">
+          {isLogin ? "Don't have a profile yet? " : "Already initialized? "}
           <button 
             onClick={() => setIsLogin(!isLogin)} 
-            className={`font-semibold hover:underline ${role === 'student' ? 'text-cyan-400' : 'text-purple-400'}`}
+            className={`font-semibold hover:underline transition-colors ${
+              isStudent ? 'text-blue-400 hover:text-blue-300' : 'text-purple-400 hover:text-purple-300'
+            }`}
           >
-            {isLogin ? 'Register' : 'Login'}
+            {isLogin ? 'Register' : 'Sign In'}
           </button>
         </div>
       </div>

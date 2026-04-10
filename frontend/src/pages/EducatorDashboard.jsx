@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import { useNavigate } from 'react-router-dom';
-import { Users, AlertTriangle, CheckCircle, BarChart3, LogOut, Search, Check, X } from 'lucide-react';
+import { Users, AlertTriangle, CheckCircle2, BarChart3, LogOut, Search, Check, X, BrainCircuit, Sparkles } from 'lucide-react';
 import axios from 'axios';
 
 export default function EducatorDashboard() {
@@ -133,97 +133,116 @@ export default function EducatorDashboard() {
   if (!user || user.role !== 'educator') return null;
 
   return (
-    <div className="h-screen w-full flex bg-[#0B1120] text-slate-200 overflow-hidden font-sans">
+    <div className="h-screen w-full flex bg-[#0a0a0a] text-neutral-200 overflow-hidden font-sans selection:bg-purple-500/30">
       
-      {/* Sidebar Panel */}
-      <div className="w-64 glass-panel border-r border-slate-800 flex flex-col p-6 h-full relative z-10">
+      {/* ── Advanced Minimalist Background ── */}
+      <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80vw] h-[500px] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900/20 via-[#0a0a0a]/0 to-transparent opacity-50 mix-blend-screen" />
+      </div>
+
+      {/* ── Sidebar Panel ── */}
+      <div className="w-64 bg-[#0a0a0a] border-r border-white/5 flex flex-col p-6 h-full relative z-10">
         <div className="flex items-center gap-3 mb-10">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-500 to-pink-600 flex items-center justify-center shadow-lg shadow-purple-500/20">
-            <BarChart3 className="w-6 h-6 text-white" />
+          <div className="w-9 h-9 rounded-xl bg-purple-500/10 flex items-center justify-center border border-purple-500/20">
+            <BarChart3 className="w-5 h-5 text-purple-400" />
           </div>
-          <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-400">
-            Admin Center
-          </h1>
+          <div>
+            <h1 className="text-lg font-bold text-white tracking-tight">Admin Center</h1>
+            <p className="text-[10px] font-mono text-neutral-500 uppercase tracking-widest mt-0.5">Pragyantra</p>
+          </div>
         </div>
         
-        <nav className="flex-1 space-y-2">
-          <a href="#" className="flex items-center gap-3 px-4 py-3 bg-purple-500/10 text-purple-300 font-medium rounded-xl border border-purple-500/20">
-            <AlertTriangle className="w-5 h-5" />
-            Misconception Clusters
-          </a>
-          <a href="#" className="flex items-center gap-3 px-4 py-3 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 rounded-xl transition-colors">
-            <Users className="w-5 h-5" />
+        <nav className="flex-1 space-y-1">
+          <button className="w-full flex items-center gap-3 px-3 py-2.5 bg-white/5 text-white text-sm font-medium rounded-lg transition-all relative">
+            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-4 bg-purple-500 rounded-r-full" />
+            <AlertTriangle className="w-4 h-4 text-purple-400" />
+            Cognitive Clusters
+          </button>
+          <button className="w-full flex items-center gap-3 px-3 py-2.5 text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.02] text-sm font-medium rounded-lg transition-colors">
+            <Users className="w-4 h-4" />
             Student Roster
-          </a>
+          </button>
         </nav>
 
-        <div className="mt-auto pt-6 border-t border-slate-800">
-          <button onClick={handleLogout} className="flex items-center gap-3 px-4 py-2 w-full text-slate-400 hover:text-rose-400 transition-colors">
-            <LogOut className="w-5 h-5" />
+        <div className="mt-auto pt-6 border-t border-white/5">
+          <button onClick={handleLogout} className="flex items-center gap-3 px-3 py-2 w-full text-sm font-medium text-neutral-500 hover:text-rose-400 transition-colors rounded-lg hover:bg-rose-500/10">
+            <LogOut className="w-4 h-4" />
             Sign Out
           </button>
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="flex-1 p-10 overflow-y-auto relative">
-        {/* Glow effect */}
-        <div className="absolute top-[-5%] right-[-5%] w-[40rem] h-[40rem] bg-purple-600/10 rounded-full blur-[100px] pointer-events-none"></div>
-
-        <div className="max-w-6xl mx-auto">
-          <header className="mb-10 flex justify-between items-end">
+      {/* ── Main Content ── */}
+      <div className="flex-1 p-6 md:p-10 overflow-y-auto relative z-10">
+        <div className="max-w-6xl mx-auto pb-16">
+          
+          <header className="mb-10 flex flex-col md:flex-row justify-between md:items-end gap-6">
             <div>
-              <h2 className="text-3xl font-bold text-white tracking-tight mb-2">Cohort Cognitive Health</h2>
-              <p className="text-slate-400">Algorithmic clustering of outstanding student misconceptions.</p>
+              <div className="flex items-center gap-2 mb-2 text-purple-400">
+                <Sparkles className="w-4 h-4" />
+                <span className="text-xs font-bold uppercase tracking-widest">Educator Overview</span>
+              </div>
+              <h2 className="text-3xl md:text-4xl font-extrabold text-white tracking-tight mb-2">Cohort Cognitive Health</h2>
+              <p className="text-neutral-400 text-sm">Algorithmic clustering of outstanding student misconceptions.</p>
             </div>
             
-            <div className="relative w-64">
-              <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
-              <input type="text" placeholder="Search cohorts..." className="w-full bg-slate-900 border border-slate-800 rounded-full py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-purple-500/50" />
+            <div className="relative w-full md:w-72">
+              <Search className="absolute left-3.5 top-3 w-4 h-4 text-neutral-500" />
+              <input 
+                type="text" 
+                placeholder="Search cohorts..." 
+                className="w-full bg-[#111113] border border-white/5 rounded-full py-2.5 pl-10 pr-4 text-sm text-neutral-200 placeholder-neutral-600 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all" 
+              />
             </div>
           </header>
 
           {isLoading ? (
-            <div className="flex items-center justify-center h-64">
-               <div className="w-8 h-8 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin"></div>
+            <div className="flex flex-col items-center justify-center h-64 space-y-4">
+              <div className="relative">
+                <div className="absolute inset-0 blur-xl bg-purple-500/20 rounded-full animate-pulse" />
+                <BrainCircuit className="w-8 h-8 relative z-10 animate-pulse text-purple-400" />
+              </div>
+              <p className="text-xs uppercase tracking-widest font-medium text-neutral-500">Analyzing Clusters...</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
               {clusters.length === 0 && (
-                <div className="col-span-full text-slate-400">No cluster data available yet.</div>
+                <div className="col-span-full text-neutral-500 text-sm p-8 text-center border border-white/5 border-dashed rounded-2xl bg-[#111113]">
+                  No cluster data available yet.
+                </div>
               )}
               {clusters.map((cluster, idx) => (
-                <div key={idx} className="glass-panel p-6 rounded-3xl hover:border-purple-500/30 transition-all duration-300 group">
-                  <div className="flex justify-between items-start mb-4">
-                    <div className={`px-3 py-1 text-xs font-semibold rounded-full border ${
+                <div key={idx} className="bg-[#111113] p-6 rounded-2xl border border-white/5 hover:border-white/10 transition-all duration-300 group shadow-sm">
+                  <div className="flex justify-between items-start mb-5">
+                    <div className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest rounded border ${
                       cluster.severity === 'High' 
                         ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' 
                         : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
                     }`}>
                       {cluster.severity} Priority
                     </div>
-                    <div className="flex items-center gap-1.5 text-purple-300 bg-purple-500/10 px-3 py-1 rounded-full border border-purple-500/20">
+                    <div className="flex items-center gap-1.5 text-purple-300 bg-purple-500/10 px-2.5 py-1 rounded border border-purple-500/20">
                       <Users className="w-3.5 h-3.5" />
-                      <span className="text-xs font-bold">{cluster.studentCount} Affected</span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider">{cluster.studentCount} Affected</span>
                     </div>
                   </div>
                   
-                  <h3 className="text-xl font-semibold text-slate-100 mb-2 leading-snug">
+                  <h3 className="text-lg font-semibold text-white mb-2 leading-snug">
                     "{cluster.misconception}"
                   </h3>
                   
-                  <div className="mt-6 pt-4 border-t border-slate-700/50">
-                    <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold mb-3">Affected Students:</p>
+                  <div className="mt-5 pt-4 border-t border-white/5">
+                    <p className="text-[10px] text-neutral-500 uppercase tracking-widest font-semibold mb-3">Affected Students:</p>
                     <div className="flex flex-wrap gap-2">
                       {cluster.students.map((student, sIdx) => (
-                        <span key={sIdx} className="text-xs px-2.5 py-1 bg-slate-800 text-slate-300 rounded-lg border border-slate-700 group-hover:border-slate-600 transition-colors">
+                        <span key={sIdx} className="text-xs px-2.5 py-1 bg-[#0a0a0a] text-neutral-300 rounded-md border border-white/5">
                           {student}
                         </span>
                       ))}
                     </div>
                   </div>
 
-                  <button className="w-full mt-6 py-2.5 bg-slate-800 hover:bg-purple-600 text-sm font-medium rounded-xl transition-all border border-slate-700 hover:border-purple-500">
+                  <button className="w-full mt-6 py-2.5 bg-white text-black hover:bg-neutral-200 text-sm font-semibold rounded-xl transition-all">
                     Deploy Targeted Intervention
                   </button>
                 </div>
@@ -231,84 +250,104 @@ export default function EducatorDashboard() {
             </div>
           )}
 
+          {/* ── Review Queues Section ── */}
           <div className="mt-12 grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="glass-panel p-6 rounded-3xl border border-slate-700/50">
-              <div className="flex items-center gap-3 mb-4">
-                <AlertTriangle className="w-5 h-5 text-amber-400" />
-                <h3 className="text-xl font-semibold text-white">Misconception Review</h3>
-              </div>
-              {misconceptionReviews.length === 0 && (
-                <div className="text-slate-400 text-sm">No pending misconceptions.</div>
-              )}
-              {misconceptionReviews.map((item) => (
-                <div key={item.review_id} className="mb-4 rounded-2xl border border-slate-700/60 bg-slate-900/60 p-4">
-                  <p className="text-sm font-semibold text-slate-100">{item.topic || 'Untitled topic'}</p>
-                  <p className="text-xs text-slate-400 mt-2">{item.flawed_logic_description}</p>
-                  <p className="text-xs text-slate-500 mt-2">Remedy: {item.remedial_strategy}</p>
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      onClick={() => handleReviewDecision(item.review_id, 'misconception', 'approve')}
-                      className="flex items-center gap-2 rounded-xl border border-emerald-400/30 px-3 py-2 text-xs text-emerald-200"
-                    >
-                      <Check className="w-3.5 h-3.5" /> Approve
-                    </button>
-                    <button
-                      onClick={() => handleReviewDecision(item.review_id, 'misconception', 'reject')}
-                      className="flex items-center gap-2 rounded-xl border border-rose-400/30 px-3 py-2 text-xs text-rose-200"
-                    >
-                      <X className="w-3.5 h-3.5" /> Reject
-                    </button>
-                  </div>
+            
+            {/* Misconception Review */}
+            <div className="bg-[#111113] p-6 md:p-8 rounded-2xl border border-white/5">
+              <div className="flex items-center justify-between mb-6 pb-4 border-b border-white/5">
+                <div className="flex items-center gap-3">
+                  <AlertTriangle className="w-5 h-5 text-amber-400" />
+                  <h3 className="text-base font-semibold text-white">Misconception Review</h3>
                 </div>
-              ))}
+                <span className="text-[10px] font-mono text-neutral-500 uppercase tracking-widest bg-[#0a0a0a] px-2 py-1 rounded border border-white/5">Queue</span>
+              </div>
+              
+              {misconceptionReviews.length === 0 && (
+                <div className="text-neutral-500 text-sm py-4 text-center">No pending misconceptions.</div>
+              )}
+              <div className="space-y-3">
+                {misconceptionReviews.map((item) => (
+                  <div key={item.review_id} className="rounded-xl border border-white/5 bg-white/[0.02] p-4 hover:bg-white/[0.04] transition-colors">
+                    <p className="text-sm font-semibold text-white">{item.topic || 'Untitled topic'}</p>
+                    <p className="text-xs text-neutral-400 mt-1.5 leading-relaxed">{item.flawed_logic_description}</p>
+                    <p className="text-xs text-neutral-500 mt-2 font-medium">Remedy: <span className="text-neutral-300">{item.remedial_strategy}</span></p>
+                    <div className="mt-4 flex gap-2">
+                      <button
+                        onClick={() => handleReviewDecision(item.review_id, 'misconception', 'approve')}
+                        className="flex-1 flex justify-center items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 hover:bg-emerald-500/20 px-3 py-2 text-xs font-semibold text-emerald-300 transition-colors"
+                      >
+                        <Check className="w-3.5 h-3.5" /> Approve
+                      </button>
+                      <button
+                        onClick={() => handleReviewDecision(item.review_id, 'misconception', 'reject')}
+                        className="flex-1 flex justify-center items-center gap-2 rounded-lg border border-rose-500/20 bg-rose-500/10 hover:bg-rose-500/20 px-3 py-2 text-xs font-semibold text-rose-300 transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" /> Reject
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
 
-            <div className="glass-panel p-6 rounded-3xl border border-slate-700/50">
-              <div className="flex items-center gap-3 mb-4">
-                <CheckCircle className="w-5 h-5 text-emerald-400" />
-                <h3 className="text-xl font-semibold text-white">Curriculum Graph Review</h3>
-              </div>
-              {graphReviews.length === 0 && (
-                <div className="text-slate-400 text-sm">No pending graph edges.</div>
-              )}
-              {graphReviews.map((item) => (
-                <div key={item.review_id} className="mb-4 rounded-2xl border border-slate-700/60 bg-slate-900/60 p-4">
-                  <p className="text-sm text-slate-100">{item.prerequisite_topic} → {item.dependent_topic}</p>
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      onClick={() => handleReviewDecision(item.review_id, 'graph', 'approve')}
-                      className="flex items-center gap-2 rounded-xl border border-emerald-400/30 px-3 py-2 text-xs text-emerald-200"
-                    >
-                      <Check className="w-3.5 h-3.5" /> Approve
-                    </button>
-                    <button
-                      onClick={() => handleReviewDecision(item.review_id, 'graph', 'reject')}
-                      className="flex items-center gap-2 rounded-xl border border-rose-400/30 px-3 py-2 text-xs text-rose-200"
-                    >
-                      <X className="w-3.5 h-3.5" /> Reject
-                    </button>
-                  </div>
+            {/* Curriculum Graph Review */}
+            <div className="bg-[#111113] p-6 md:p-8 rounded-2xl border border-white/5">
+              <div className="flex items-center justify-between mb-6 pb-4 border-b border-white/5">
+                <div className="flex items-center gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                  <h3 className="text-base font-semibold text-white">Curriculum Graph</h3>
                 </div>
-              ))}
+                <span className="text-[10px] font-mono text-neutral-500 uppercase tracking-widest bg-[#0a0a0a] px-2 py-1 rounded border border-white/5">Queue</span>
+              </div>
 
-              <div className="mt-4 border-t border-slate-700/60 pt-4">
-                <p className="text-xs text-slate-400 uppercase tracking-wider mb-2">Add edge manually</p>
-                <div className="flex flex-col gap-2">
+              {graphReviews.length === 0 && (
+                <div className="text-neutral-500 text-sm py-4 text-center">No pending graph edges.</div>
+              )}
+              <div className="space-y-3">
+                {graphReviews.map((item) => (
+                  <div key={item.review_id} className="rounded-xl border border-white/5 bg-white/[0.02] p-4 hover:bg-white/[0.04] transition-colors">
+                    <p className="text-sm font-medium text-neutral-200">
+                      <span className="text-neutral-400">From:</span> {item.prerequisite_topic} <br/>
+                      <span className="text-neutral-400">To:</span> {item.dependent_topic}
+                    </p>
+                    <div className="mt-4 flex gap-2">
+                      <button
+                        onClick={() => handleReviewDecision(item.review_id, 'graph', 'approve')}
+                        className="flex-1 flex justify-center items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 hover:bg-emerald-500/20 px-3 py-2 text-xs font-semibold text-emerald-300 transition-colors"
+                      >
+                        <Check className="w-3.5 h-3.5" /> Approve
+                      </button>
+                      <button
+                        onClick={() => handleReviewDecision(item.review_id, 'graph', 'reject')}
+                        className="flex-1 flex justify-center items-center gap-2 rounded-lg border border-rose-500/20 bg-rose-500/10 hover:bg-rose-500/20 px-3 py-2 text-xs font-semibold text-rose-300 transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" /> Reject
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Add Edge Manually */}
+              <div className="mt-6 pt-5 border-t border-white/5">
+                <p className="text-[10px] text-neutral-500 uppercase tracking-widest font-bold mb-3">Add edge manually</p>
+                <div className="flex flex-col gap-3">
                   <input
                     value={edgePrereq}
                     onChange={(event) => setEdgePrereq(event.target.value)}
                     placeholder="Prerequisite topic"
-                    className="w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs text-slate-200"
+                    className="w-full rounded-xl border border-white/5 bg-[#0a0a0a] px-4 py-2.5 text-sm text-neutral-200 placeholder-neutral-600 focus:outline-none focus:border-purple-500/50"
                   />
                   <input
                     value={edgeDependent}
                     onChange={(event) => setEdgeDependent(event.target.value)}
                     placeholder="Dependent topic"
-                    className="w-full rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs text-slate-200"
+                    className="w-full rounded-xl border border-white/5 bg-[#0a0a0a] px-4 py-2.5 text-sm text-neutral-200 placeholder-neutral-600 focus:outline-none focus:border-purple-500/50"
                   />
                   <button
                     onClick={handleCreateEdge}
-                    className="rounded-xl border border-emerald-400/40 px-3 py-2 text-xs text-emerald-200"
+                    className="rounded-xl bg-white text-black hover:bg-neutral-200 px-4 py-2.5 text-sm font-semibold transition-colors mt-1"
                   >
                     Queue Edge
                   </button>
@@ -317,71 +356,93 @@ export default function EducatorDashboard() {
             </div>
           </div>
 
+          {/* Status Banner */}
           {reviewStatus && (
-            <div className="mt-6 rounded-2xl border border-slate-700/60 bg-slate-900/60 p-4 text-xs text-slate-300">
+            <div className="mt-6 rounded-xl border border-white/10 bg-white/[0.02] p-4 text-sm font-medium text-neutral-300 flex items-center justify-center animate-in fade-in">
               {reviewStatus}
             </div>
           )}
 
+          {/* ── Lower Section ── */}
           <div className="mt-12 grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="glass-panel p-6 rounded-3xl border border-slate-700/50">
-              <div className="flex items-center gap-3 mb-4">
-                <Users className="w-5 h-5 text-cyan-300" />
-                <h3 className="text-xl font-semibold text-white">Student Misconceptions</h3>
-              </div>
-              {studentMisconceptions.length === 0 && (
-                <div className="text-slate-400 text-sm">No student misconception data yet.</div>
-              )}
-              {studentMisconceptions.map((item) => (
-                <div key={item.state_id} className="mb-4 rounded-2xl border border-slate-700/60 bg-slate-900/60 p-4">
-                  <p className="text-sm text-slate-100">
-                    <span className="font-semibold">{item.student_name || item.student_id}</span> — {item.topic || 'Unknown topic'}
-                  </p>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Encounters: {item.encounter_count} • Status: {item.status}
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button
-                      onClick={() => handleStatusUpdate(item.state_id, 'unresolved')}
-                      className="rounded-xl border border-amber-400/30 px-3 py-1.5 text-[11px] text-amber-200"
-                    >
-                      Mark Unresolved
-                    </button>
-                    <button
-                      onClick={() => handleStatusUpdate(item.state_id, 'reviewing')}
-                      className="rounded-xl border border-blue-400/30 px-3 py-1.5 text-[11px] text-blue-200"
-                    >
-                      Mark Reviewing
-                    </button>
-                    <button
-                      onClick={() => handleStatusUpdate(item.state_id, 'resolved')}
-                      className="rounded-xl border border-emerald-400/30 px-3 py-1.5 text-[11px] text-emerald-200"
-                    >
-                      Mark Resolved
-                    </button>
-                  </div>
+            
+            {/* Student Misconceptions */}
+            <div className="bg-[#111113] p-6 md:p-8 rounded-2xl border border-white/5">
+              <div className="flex items-center justify-between mb-6 pb-4 border-b border-white/5">
+                <div className="flex items-center gap-3">
+                  <BrainCircuit className="w-5 h-5 text-cyan-400" />
+                  <h3 className="text-base font-semibold text-white">Student Misconceptions</h3>
                 </div>
-              ))}
+              </div>
+              
+              {studentMisconceptions.length === 0 && (
+                <div className="text-neutral-500 text-sm py-4 text-center">No student misconception data yet.</div>
+              )}
+              <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                {studentMisconceptions.map((item) => (
+                  <div key={item.state_id} className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
+                    <p className="text-sm text-white">
+                      <span className="font-semibold text-cyan-400">{item.student_name || item.student_id}</span>
+                      <span className="text-neutral-500 mx-2">—</span> 
+                      {item.topic || 'Unknown topic'}
+                    </p>
+                    <p className="text-xs text-neutral-400 mt-2 font-mono">
+                      Encounters: {item.encounter_count} <span className="mx-2">•</span> Status: {item.status}
+                    </p>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button
+                        onClick={() => handleStatusUpdate(item.state_id, 'unresolved')}
+                        className="rounded-lg border border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-1.5 text-[11px] font-semibold text-amber-300 transition-colors"
+                      >
+                        Unresolved
+                      </button>
+                      <button
+                        onClick={() => handleStatusUpdate(item.state_id, 'reviewing')}
+                        className="rounded-lg border border-blue-500/20 bg-blue-500/10 hover:bg-blue-500/20 px-3 py-1.5 text-[11px] font-semibold text-blue-300 transition-colors"
+                      >
+                        Reviewing
+                      </button>
+                      <button
+                        onClick={() => handleStatusUpdate(item.state_id, 'resolved')}
+                        className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 hover:bg-emerald-500/20 px-3 py-1.5 text-[11px] font-semibold text-emerald-300 transition-colors"
+                      >
+                        Resolved
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
 
-            <div className="glass-panel p-6 rounded-3xl border border-slate-700/50">
-              <div className="flex items-center gap-3 mb-4">
-                <Users className="w-5 h-5 text-purple-300" />
-                <h3 className="text-xl font-semibold text-white">Student Roster</h3>
+            {/* Student Roster */}
+            <div className="bg-[#111113] p-6 md:p-8 rounded-2xl border border-white/5">
+              <div className="flex items-center justify-between mb-6 pb-4 border-b border-white/5">
+                <div className="flex items-center gap-3">
+                  <Users className="w-5 h-5 text-purple-400" />
+                  <h3 className="text-base font-semibold text-white">Student Roster</h3>
+                </div>
+                <span className="text-[10px] font-mono text-neutral-500 uppercase tracking-widest bg-[#0a0a0a] px-2 py-1 rounded border border-white/5">Directory</span>
               </div>
+
               {students.length === 0 && (
-                <div className="text-slate-400 text-sm">No students found.</div>
+                <div className="text-neutral-500 text-sm py-4 text-center">No students found.</div>
               )}
-              <div className="space-y-3">
+              <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                 {students.map((student) => (
-                  <div key={student.student_id} className="rounded-2xl border border-slate-700/60 bg-slate-900/60 p-3">
-                    <p className="text-sm text-slate-100 font-semibold">{student.name}</p>
-                    <p className="text-xs text-slate-400">{student.email || 'No email'} • {student.role || 'student'}</p>
+                  <div key={student.student_id} className="rounded-xl border border-white/5 bg-white/[0.02] p-4 flex items-center justify-between hover:bg-white/[0.04] transition-colors">
+                    <div>
+                      <p className="text-sm text-white font-semibold">{student.name}</p>
+                      <p className="text-xs text-neutral-500 mt-1">{student.email || 'No email'}</p>
+                    </div>
+                    <span className="text-[10px] uppercase tracking-widest font-bold text-neutral-400 bg-[#0a0a0a] border border-white/5 px-2 py-1 rounded">
+                      {student.role || 'student'}
+                    </span>
                   </div>
                 ))}
               </div>
             </div>
           </div>
+          
         </div>
       </div>
     </div>

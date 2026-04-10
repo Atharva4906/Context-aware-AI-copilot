@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { useStore } from '../store/useStore';
-import { Gauge, ThumbsUp, ThumbsDown, Database, Info } from 'lucide-react';
+import { Gauge, ThumbsUp, ThumbsDown, Database, Info, Terminal } from 'lucide-react';
 
 export default function ReinforcementLab() {
   const studentId = useStore((state) => state.studentId);
@@ -12,7 +12,7 @@ export default function ReinforcementLab() {
 
   const submitFeedback = async (accepted) => {
     if (!patternHash.trim() || !suggestedTopic.trim()) {
-      setStatus('Enter both pattern hash and topic before submitting.');
+      setStatus('Error: Enter both pattern hash and topic before submitting.');
       return;
     }
 
@@ -27,97 +27,121 @@ export default function ReinforcementLab() {
         student_feedback: accepted
       });
 
-      setStatus(`Saved. New confidence score: ${response.data?.new_confidence_score ?? 'updated'}.`);
+      setStatus(`Success: Q-Value updated. New confidence score: ${response.data?.new_confidence_score ?? 'updated'}.`);
     } catch (err) {
       console.error(err);
-      setStatus('Failed to submit feedback. Check the API server.');
+      setStatus('Error: Failed to submit feedback. Check the API server connection.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="flex-1 overflow-y-auto p-10 mt-4 relative">
-      <div className="max-w-4xl mx-auto space-y-8">
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-emerald-500/20 rounded-xl">
-            <Gauge className="w-6 h-6 text-emerald-300" />
-          </div>
+    <div className="flex-1 overflow-y-auto bg-[#0a0a0a] text-neutral-200 p-6 md:p-10 font-sans selection:bg-emerald-500/30">
+      <div className="max-w-4xl mx-auto space-y-8 pb-16">
+        
+        {/* Sleek Header */}
+        <div className="flex items-end justify-between mb-10">
           <div>
-            <h1 className="text-4xl font-bold text-white">Reinforcement Lab</h1>
-            <p className="text-sm text-slate-400">Manually push RL feedback and inspect where it is stored.</p>
+            <div className="flex items-center gap-2 mb-2 text-emerald-400">
+              <Terminal className="w-4 h-4" />
+              <span className="text-xs font-bold uppercase tracking-widest">Developer Tools</span>
+            </div>
+            <h1 className="text-4xl font-extrabold text-white tracking-tight">Reinforcement Lab</h1>
+            <p className="text-neutral-400 text-sm mt-2 max-w-xl leading-relaxed">
+              Manually inject RL feedback signals to adjust Q-values and debug diagnostic policies in real-time.
+            </p>
           </div>
         </div>
 
-        <div className="glass-panel p-6 rounded-3xl border border-slate-700/50">
-          <div className="flex items-start gap-3">
-            <Info className="w-5 h-5 text-cyan-300 mt-0.5" />
-            <div className="space-y-2 text-sm text-slate-300">
+        {/* Info Panel */}
+        <div className="bg-[#111113] p-6 md:p-8 rounded-2xl border border-white/5 shadow-sm">
+          <div className="flex items-start gap-4">
+            <div className="mt-0.5 p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20 shrink-0">
+              <Info className="w-5 h-5 text-blue-400" />
+            </div>
+            <div className="space-y-3 text-[15px] text-neutral-300 leading-relaxed">
               <p>
-                Thumbs-up / thumbs-down signals are sent to <span className="text-cyan-300 font-semibold">/api/rl-feedback</span>.
+                Thumbs-up and thumbs-down signals bypass the standard UI flow and are transmitted directly to the{' '}
+                <code className="text-blue-300 bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-500/20 text-sm font-mono">/api/rl-feedback</code> endpoint.
               </p>
               <p>
-                The backend updates the <span className="text-emerald-300 font-semibold">rl_diagnostic_policy</span> table
-                in Supabase, adjusting the Q-value for the provided <span className="text-amber-200">pattern_hash</span> +
-                <span className="text-amber-200"> topic</span> pair.
+                The backend engine updates the{' '}
+                <code className="text-emerald-300 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 text-sm font-mono">rl_diagnostic_policy</code>{' '}
+                table in the ledger, recalculating the confidence Q-value for the provided{' '}
+                <span className="text-amber-300 font-medium">pattern_hash</span> +{' '}
+                <span className="text-amber-300 font-medium">topic</span> tuple.
               </p>
             </div>
           </div>
         </div>
 
-        <div className="glass-panel p-8 rounded-3xl border border-slate-700/50">
-          <div className="flex items-center gap-3 mb-6">
-            <Database className="w-5 h-5 text-emerald-300" />
-            <h2 className="text-2xl font-semibold text-white">Force feedback</h2>
+        {/* Manual Override Form */}
+        <div className="bg-[#111113] p-6 md:p-8 rounded-2xl border border-white/5 shadow-sm">
+          <div className="flex items-center gap-3 mb-8 pb-4 border-b border-white/5">
+            <Database className="w-5 h-5 text-emerald-400" />
+            <h2 className="text-lg font-semibold text-white">Manual Policy Override</h2>
           </div>
 
-          <div className="grid grid-cols-1 gap-4">
-            <label className="text-sm text-slate-300">
-              Pattern hash
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-widest text-neutral-500 mb-2.5">
+                Pattern Hash
+              </label>
               <input
                 type="text"
                 value={patternHash}
                 onChange={(event) => setPatternHash(event.target.value)}
-                placeholder="e.g. 7f2d9a..."
-                className="mt-2 w-full rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-3 text-sm text-slate-200 focus:border-emerald-400/60 focus:outline-none"
+                placeholder="e.g. 7f2d9a3b..."
+                className="w-full rounded-xl border border-white/5 bg-[#0a0a0a] px-4 py-3.5 text-sm text-white placeholder-neutral-600 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 outline-none transition-all font-mono"
               />
-            </label>
+            </div>
 
-            <label className="text-sm text-slate-300">
-              Suggested topic
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-widest text-neutral-500 mb-2.5">
+                Suggested Topic
+              </label>
               <input
                 type="text"
                 value={suggestedTopic}
                 onChange={(event) => setSuggestedTopic(event.target.value)}
                 placeholder="e.g. Fraction Simplification"
-                className="mt-2 w-full rounded-2xl border border-slate-700 bg-slate-900/60 px-4 py-3 text-sm text-slate-200 focus:border-emerald-400/60 focus:outline-none"
+                className="w-full rounded-xl border border-white/5 bg-[#0a0a0a] px-4 py-3.5 text-sm text-white placeholder-neutral-600 focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/20 outline-none transition-all"
               />
-            </label>
+            </div>
           </div>
 
+          {/* Status Banner */}
           {status && (
-            <div className="mt-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-xs text-emerald-200">
+            <div className={`mb-6 p-4 rounded-xl border flex items-center gap-3 text-sm font-medium animate-in fade-in slide-in-from-top-2 ${
+              status.startsWith('Error') 
+                ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' 
+                : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+            }`}>
+              <Gauge className="w-4 h-4 shrink-0" />
               {status}
             </div>
           )}
 
-          <div className="mt-6 flex flex-wrap gap-3">
+          {/* Action Buttons */}
+          <div className="flex flex-col sm:flex-row gap-4">
             <button
-              className="flex items-center gap-2 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-200"
+              className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 hover:bg-emerald-500/20 py-3.5 text-sm font-semibold text-emerald-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={() => submitFeedback(true)}
               disabled={isSubmitting}
             >
-              <ThumbsUp className="w-4 h-4" /> Confirm (Thumbs Up)
+              <ThumbsUp className="w-4 h-4" /> Confirm Mapping (+ Reward)
             </button>
             <button
-              className="flex items-center gap-2 rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-2 text-sm text-rose-200"
+              className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-rose-500/20 bg-rose-500/10 hover:bg-rose-500/20 py-3.5 text-sm font-semibold text-rose-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={() => submitFeedback(false)}
               disabled={isSubmitting}
             >
-              <ThumbsDown className="w-4 h-4" /> Reject (Thumbs Down)
+              <ThumbsDown className="w-4 h-4" /> Reject Mapping (- Reward)
             </button>
           </div>
         </div>
+
       </div>
     </div>
   );
