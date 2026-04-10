@@ -3,16 +3,51 @@ from database.supabase_client import get_supabase_client
 
 supabase = get_supabase_client()
 
-EPSILON = 0.10  # 10% exploration
+EPSILON = 0.10  # 10% exploration rate
 
-def get_rl_prediction(pattern_hash: str) -> str:
-    """Implement Epsilon-Greedy Policy to predict the next area of weakness."""
+# Per-category topic pools — used for both exploration and smart fallback
+CATEGORY_TOPICS = {
+    "Math": [
+        "Arithmetic Order of Operations", "Algebraic Manipulation", "Exponent Rules",
+        "Fraction Arithmetic", "Equation Solving", "Proportional Reasoning",
+        "Number System Confusion", "Sign Errors"
+    ],
+    "Coding": [
+        "Variable Scope", "Loop Conditions", "Off-by-One Errors",
+        "Recursion Base Case", "Pointer/Reference Confusion", "Type Coercion",
+        "Function Return Values", "Syntax Fundamentals"
+    ],
+    "Science": [
+        "Force vs Energy Confusion", "Newton's Law Application", "Conservation Laws",
+        "Thermodynamics Misconceptions", "Electrical Circuit Analysis"
+    ],
+    "General": [
+        "Logical Deduction", "Cause-Effect Reasoning", "Pattern Recognition",
+        "Abstract Reasoning", "Critical Evaluation"
+    ],
+}
+DEFAULT_TOPICS = [
+    "Conceptual Foundation", "Abstract Reasoning", "Problem Decomposition",
+    "Logical Deduction", "Pattern Recognition"
+]
+
+def _topics_for_category(category: str) -> list:
+    if not category:
+        return DEFAULT_TOPICS
+    for key in CATEGORY_TOPICS:
+        if key.lower() in category.lower():
+            return CATEGORY_TOPICS[key]
+    return DEFAULT_TOPICS
+
+
+def get_rl_prediction(pattern_hash: str, category: str = "") -> str:
+    """Epsilon-Greedy Policy — predict next area of weakness."""
+    pool = _topics_for_category(category)
     if random.random() < EPSILON:
-        # Exploration: Pick a random topic (in a real system, from a curated list of topics)
-        topics = ["Variable Initialization", "Loop Conditions", "Scope Error", "Syntax Fundamentals"]
-        return random.choice(topics)
+        # Exploration: pick a category-aware random topic
+        return random.choice(pool)
     else:
-        # Exploitation: Get the highest confidence_score for this pattern
+        # Exploitation: fetch the highest-confidence entry for this pattern
         try:
             response = supabase.table('rl_diagnostic_policy') \
                 .select('predicted_topic', 'confidence_score') \
@@ -20,14 +55,16 @@ def get_rl_prediction(pattern_hash: str) -> str:
                 .order('confidence_score', desc=True) \
                 .limit(1) \
                 .execute()
-            
+
             if response.data:
                 return response.data[0]['predicted_topic']
         except Exception as e:
             print(f"RL fetch error: {e}")
-            
-        # Fallback if no history
-        return "Variable Initialization"
+
+        # Fallback: use deterministic selection from the pool so it's
+        # at least category-relevant and never always the same string
+        idx = hash(pattern_hash) % len(pool)
+        return pool[idx]
 
 def get_knowledge_graph_predictions(failed_topic: str) -> list:
     """Check the curriculum knowledge graph for topics that might fail downstream."""

@@ -50,6 +50,15 @@ class QuestionModel(BaseModel):
     category: str
     content: str
     options: Optional[List[str]] = None
+    correct_answer: Optional[str] = None
+
+class AnswerDetectRequest(BaseModel):
+    question_content: str
+    options: List[str]
+
+class AnswerDetectResponse(BaseModel):
+    correct_answer: str
+    correct_index: int
 
 class DashboardStatsResponse(BaseModel):
     total_questions_answered: int

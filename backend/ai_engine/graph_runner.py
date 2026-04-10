@@ -81,7 +81,7 @@ def run_diagnostic_crew(
 ) -> tuple:
     """
     Executes the multi-node diagnostic graph.
-    Returns (feedback_text: str, mcq_dict: dict) — identical to old crew_runner.
+    Returns (feedback_text: str, mcq_dict: dict, misconception_verdict: str)
     """
     initial_state: DiagnosticState = {
         "student_id": student_id,
@@ -105,6 +105,7 @@ def run_diagnostic_crew(
     print(f"[LangGraph] Starting Diagnostic Graph for Student: {student_id}")
     result = diagnostic_graph.invoke(initial_state)
 
-    feedback_text = result.get("feedback_text", "No feedback generated.")
-    mcq_dict      = result.get("mcq_dict", {})
-    return feedback_text, mcq_dict
+    feedback_text         = result.get("feedback_text", "No feedback generated.")
+    mcq_dict              = result.get("mcq_dict", {})
+    misconception_verdict = result.get("misconception_verdict", "")
+    return feedback_text, mcq_dict, misconception_verdict

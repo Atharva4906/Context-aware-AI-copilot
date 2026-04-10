@@ -11,11 +11,14 @@ from models.schemas import (
     HistoryResponse,
     HistoryItemModel,
     ConceptRequest,
-    WeakConceptRequest
+    WeakConceptRequest,
+    AnswerDetectRequest,
+    AnswerDetectResponse
 )
 from database.supabase_client import get_supabase_client, get_student_history, log_interaction
 from ai_engine.rl_engine import generate_pattern_hash, get_rl_prediction, update_rl_policy, get_knowledge_graph_predictions
 from ai_engine.graph_runner import run_diagnostic_crew, run_logic_verification_questions, run_concept_extraction
+from ai_engine.graph_nodes import detect_correct_answer, extract_topic_from_verdict
 
 app = FastAPI(title="Context-Aware AI Co-Pilot API")
 
@@ -90,13 +93,13 @@ async def analyze_response(request: AnalyzeRequest):
             print(f"Exception retrieving vector results: {e}")
 
         pattern_hash = generate_pattern_hash(history)
-        predicted_rl_topic = get_rl_prediction(pattern_hash)
+        predicted_rl_topic = get_rl_prediction(pattern_hash, category=request.category or "")
 
         # True answer extraction (for hackathon: pass context if answer unknown)
         # Ideally we fetch the real correct answer from DB using request.question_id
         true_answer = "Determined by logic."
         
-        feedback_text, mcq_dict = run_diagnostic_crew(
+        feedback_text, mcq_dict, misconception_verdict = run_diagnostic_crew(
             student_id=student_id,
             user_query=user_query,
             current_context=current_context,
@@ -110,20 +113,28 @@ async def analyze_response(request: AnalyzeRequest):
             true_answer=true_answer
         )
 
+        # Use the AI-detected misconception as the definitive topic for logs and UI
+        # We extract a short label from the detailed verdict paragraph
+        final_detected_topic = extract_topic_from_verdict(misconception_verdict, category=request.category or "")
+        
+        # If the AI couldn't find a specific topic, use the RL prediction as a secondary fallback
+        if not final_detected_topic or "Conceptual" in final_detected_topic:
+            final_detected_topic = predicted_rl_topic
+
         log_interaction(
             student_id=student_id, 
             user_query=user_query, 
             agent_response=feedback_text,
             question_id=request.question_id,
             category=request.category,
-            predicted_misconception=predicted_rl_topic
+            predicted_misconception=final_detected_topic
         )
 
         return AnalyzeResponse(
             needs_verification=False,
             feedback=feedback_text,
             mcq=mcq_dict,
-            predicted_topic=predicted_rl_topic,
+            predicted_topic=final_detected_topic,
             pattern_hash=pattern_hash
         )
 
@@ -240,6 +251,15 @@ async def get_history(student_id: str):
     try:
         res = supabase.table('interaction_logs').select('*').eq('student_id', student_id).order('created_at', desc=True).execute()
         return HistoryResponse(history=res.data if res.data else [])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/detect-answer", response_model=AnswerDetectResponse)
+async def detect_answer(request: AnswerDetectRequest):
+    """Use LLM to identify the correct answer option for a given question."""
+    try:
+        result = detect_correct_answer(request.question_content, request.options)
+        return AnswerDetectResponse(**result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

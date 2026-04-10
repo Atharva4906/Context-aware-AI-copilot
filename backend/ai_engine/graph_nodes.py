@@ -66,25 +66,33 @@ def question_generator_node(state: VerificationState) -> dict:
     system = (
         "You are a master Dynamic Question Generator. "
         "You craft tricky follow-up questions to expose students who are just guessing. "
-        "Always output ONLY a valid JSON array, no markdown."
+        "Always output ONLY a valid JSON array, no markdown. "
+        "IMPORTANT: Each option in the 'options' array must be the full text of the answer choice, "
+        "NOT a letter label like 'A' or 'B'. Write out the actual answer content."
     )
     user = dedent(f"""
-        The student just guessed the right answer using this core logic context:
+        The student just answered a question correctly using this context:
         ---
         {core_logic}
         ---
-        Generate EXACTLY TWO multiple-choice questions to test if they truly understand this logic or just got lucky.
-        The questions should be subtly tricky.
+        Generate EXACTLY TWO multiple-choice questions to test if they truly understand the logic or just got lucky.
+        The questions should be subtly tricky and directly related to the core concept.
 
-        Return ONLY a raw JSON array of 2 objects. Do not use markdown wrappers like ```json.
-        Format:
+        Return ONLY a raw JSON array of 2 objects. No markdown. No code fences.
+        CRITICAL: Each option must be the full answer text — NOT just a letter like "A", "B", "C", "D".
+
+        Example format:
         [
           {{
-            "question": "The question...?",
-            "options": ["A", "B", "C", "D"],
-            "correct_answer": "B"
+            "question": "What does the expression x^2 * x^3 simplify to?",
+            "options": ["x^5", "x^6", "x^1", "2x^5"],
+            "correct_answer": "x^5"
           }},
-          ...
+          {{
+            "question": "Which rule is applied when dividing exponents with the same base?",
+            "options": ["Subtract the exponents", "Add the exponents", "Multiply the exponents", "Divide the bases"],
+            "correct_answer": "Subtract the exponents"
+          }}
         ]
     """)
     raw = _call(groq_llm_8b, system, user)
@@ -93,6 +101,7 @@ def question_generator_node(state: VerificationState) -> dict:
     except Exception:
         questions = []
     return {"follow_up_questions": questions}
+
 
 
 # ─── Diagnostic graph nodes ──────────────────────────────────────────────────
@@ -205,3 +214,78 @@ def architect_node(state: DiagnosticState) -> dict:
     except Exception:
         mcq_dict = {}
     return {"mcq_dict": mcq_dict}
+
+
+# ─── Standalone: detect correct answer for a question ───────────────────────
+def detect_correct_answer(question_content: str, options: list) -> dict:
+    """
+    Given a question body and its options list, use the 70b LLM to identify
+    which option is correct. Returns {"correct_answer": str, "correct_index": int}.
+    """
+    numbered = "\n".join([f"{i}. {opt}" for i, opt in enumerate(options)])
+    system = (
+        "You are a precise academic answer verifier. "
+        "Given a question and a list of options, determine which option is correct. "
+        "Reply ONLY with a valid JSON object — no markdown, no explanation."
+    )
+    user = dedent(f"""
+        Question:
+        {question_content}
+
+        Options (0-indexed):
+        {numbered}
+
+        Return ONLY a JSON object with this shape:
+        {{
+          "correct_answer": "<exact text of the correct option>",
+          "correct_index": <0-based integer index>
+        }}
+    """)
+    raw = _call(groq_llm_70b, system, user)
+    try:
+        result = json.loads(_clean_json(raw))
+        # Clamp index to valid range
+        idx = int(result.get("correct_index", 0))
+        idx = max(0, min(idx, len(options) - 1))
+        return {"correct_answer": options[idx], "correct_index": idx}
+    except Exception as e:
+        print(f"[detect_correct_answer] parse error: {e} | raw={raw}")
+        return {"correct_answer": options[0], "correct_index": 0}
+
+
+# ─── Standalone: extract short topic label from judge verdict ────────────────
+def extract_topic_from_verdict(verdict: str, category: str = "") -> str:
+    """
+    Takes the judge node's full misconception_verdict paragraph and distils it
+    into a short 2-5 word topic label suitable for displaying in history.
+    Fast 8b call to avoid adding latency.
+    """
+    if not verdict or len(verdict.strip()) < 10:
+        return "Conceptual Misunderstanding"
+    system = (
+        "You are a concise academic classifier. "
+        "Read the misconception analysis and output ONLY a short 2-5 word label "
+        "naming the core concept being misunderstood. "
+        "No sentences, no explanation, no punctuation — just the topic label."
+    )
+    user = dedent(f"""
+        Category: {category or "General"}
+
+        Misconception Analysis:
+        {verdict[:800]}
+
+        Output ONLY a short topic label (2-5 words). Examples:
+        - "Exponent Subtraction Rule"
+        - "Variable Scope Confusion"
+        - "Newton's Third Law"
+        - "Off-by-One Error"
+    """)
+    try:
+        label = _call(groq_llm_8b, system, user).strip().strip('"').strip("'")
+        # Sanity: if LLM returns something too long, truncate
+        if len(label) > 60:
+            label = label[:60]
+        return label
+    except Exception as e:
+        print(f"[extract_topic_from_verdict] error: {e}")
+        return "Conceptual Misunderstanding"
