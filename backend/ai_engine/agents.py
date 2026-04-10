@@ -12,8 +12,8 @@ if not api_key:
     groq_llm_70b = None
     groq_llm_8b = None
 else:
-    groq_llm_70b = LLM(model="groq/llama3-70b-8192", api_key=api_key, temperature=0.2)
-    groq_llm_8b = LLM(model="groq/llama3-8b-8192", api_key=api_key, temperature=0.4)
+    groq_llm_70b = LLM(model="groq/llama-3.3-70b-versatile", api_key=api_key, temperature=0.2)
+    groq_llm_8b = LLM(model="groq/llama-3.1-8b-instant", api_key=api_key, temperature=0.4)
 
 def get_reasoner_agent() -> Agent:
     return Agent(

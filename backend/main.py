@@ -15,7 +15,7 @@ from models.schemas import (
 )
 from database.supabase_client import get_supabase_client, get_student_history, log_interaction
 from ai_engine.rl_engine import generate_pattern_hash, get_rl_prediction, update_rl_policy, get_knowledge_graph_predictions
-from ai_engine.crew_runner import run_diagnostic_crew, run_logic_verification_questions, run_concept_extraction
+from ai_engine.graph_runner import run_diagnostic_crew, run_logic_verification_questions, run_concept_extraction
 
 app = FastAPI(title="Context-Aware AI Co-Pilot API")
 
