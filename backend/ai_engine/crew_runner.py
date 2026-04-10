@@ -1,12 +1,12 @@
 import json
 from crewai import Crew, Process
-from backend.ai_engine.tasks import (
+from ai_engine.tasks import (
     get_reasoning_extraction_task,
     get_misconception_verification_task,
     get_contextual_feedback_task,
     get_mcq_generation_task
 )
-from backend.ai_engine.agents import (
+from ai_engine.agents import (
     get_reasoner_agent,
     get_judge_agent,
     get_tutor_agent,

@@ -1,5 +1,5 @@
 import random
-from backend.database.supabase_client import get_supabase_client
+from database.supabase_client import get_supabase_client
 
 supabase = get_supabase_client()
 

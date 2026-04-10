@@ -1,5 +1,5 @@
 from crewai import Task
-from backend.ai_engine.agents import get_reasoner_agent, get_judge_agent, get_tutor_agent, get_assessment_architect
+from ai_engine.agents import get_reasoner_agent, get_judge_agent, get_tutor_agent, get_assessment_architect
 from textwrap import dedent
 
 def get_reasoning_extraction_task(student_query: str, current_context: str) -> Task:
