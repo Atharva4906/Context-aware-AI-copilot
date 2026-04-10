@@ -10,6 +10,7 @@ class AnalyzeRequest(BaseModel):
     student_id: str
     user_query: str
     current_context: str
+    student_explanation: Optional[str] = None
     question_id: Optional[str] = None
     category: Optional[str] = None
     is_correct: bool = False
