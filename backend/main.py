@@ -85,6 +85,7 @@ async def analyze_response(request: AnalyzeRequest):
         student_id = request.student_id
         user_query = request.user_query
         current_context = request.current_context
+        student_explanation = (request.student_explanation or "").strip()
 
         # Stage 1: Is this a correct answer that needs verification questions?
         if request.is_correct and not request.is_follow_up:
@@ -126,15 +127,30 @@ async def analyze_response(request: AnalyzeRequest):
         except Exception as e:
             print(f"Error fetching weak_concepts: {e}")
 
-        # If it was a follow up, combine queries
-        if request.is_follow_up:
-            user_query = f"Original guess: {user_query}. Follow up logic test: {request.follow_up_answers}"
+        # Build one combined analysis input so diagnosis can use answer text,
+        # verification answers, metadata signals, and optional explanation together.
+        metadata_text = ""
+        if request.metadata:
+            metadata_text = (
+                f"time_taken_seconds={request.metadata.time_taken_seconds}, "
+                f"switch_count={request.metadata.switch_count}, "
+                f"backspace_count={request.metadata.backspace_count}"
+            )
+
+        analysis_parts = [f"Primary answer: {user_query}"]
+        if request.is_follow_up and request.follow_up_answers:
+            analysis_parts.append(f"Follow-up verification answers: {request.follow_up_answers}")
+        if student_explanation:
+            analysis_parts.append(f"Student explanation: {student_explanation}")
+        if metadata_text:
+            analysis_parts.append(f"Interaction metadata: {metadata_text}")
+        analysis_input = "\n".join(analysis_parts)
 
         vector_results = []
         best_match = None
         best_score = 0.0
         try:
-            query_text = f"{current_context}\nStudent response: {user_query}"
+            query_text = f"{current_context}\nStudent response:\n{analysis_input}"
             query_embedding = generate_embedding(query_text)
             active_misconceptions = get_active_misconceptions()
 
@@ -163,7 +179,7 @@ async def analyze_response(request: AnalyzeRequest):
         
         feedback_text, mcq_dict, misconception_verdict = run_diagnostic_crew(
             student_id=student_id,
-            user_query=user_query,
+            user_query=analysis_input,
             current_context=current_context,
             vector_results=vector_results,
             historical_struggle=historical_struggle,
@@ -172,7 +188,8 @@ async def analyze_response(request: AnalyzeRequest):
             guessing_detected=guessing_detected,
             vulnerable_future_topics=vulnerable_future_topics,
             weak_concepts=weak_concepts,
-            true_answer=true_answer
+            true_answer=true_answer,
+            student_explanation=student_explanation
         )
 
         # Use the AI-detected misconception as the definitive topic for logs and UI
@@ -188,7 +205,7 @@ async def analyze_response(request: AnalyzeRequest):
 
         # If there is no close match, ask LLM to propose a new misconception
         if not close_match:
-            candidate = propose_misconception_candidate(user_query, current_context, misconception_verdict)
+            candidate = propose_misconception_candidate(analysis_input, current_context, misconception_verdict)
             if candidate.get('is_novel'):
                 topic = (candidate.get('topic') or '').strip()
                 flawed_logic = (candidate.get('flawed_logic_description') or '').strip()
@@ -229,7 +246,7 @@ async def analyze_response(request: AnalyzeRequest):
 
         log_interaction(
             student_id=student_id, 
-            user_query=user_query, 
+            user_query=analysis_input,
             agent_response=feedback_text,
             question_id=request.question_id,
             category=request.category,
