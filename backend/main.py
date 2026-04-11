@@ -25,7 +25,8 @@ from models.schemas import (
     ClusterResponse,
     StudentMisconceptionResponse,
     UpdateMisconceptionStatusRequest,
-    StudentRosterResponse
+    StudentRosterResponse,
+    SubjectMisconceptionResponse,
 )
 from database.supabase_client import (
     get_supabase_client,
@@ -46,7 +47,10 @@ from database.supabase_client import (
     insert_curriculum_edge,
     get_student_misconception_records,
     update_student_misconception_status,
-    get_students
+    get_students,
+    upsert_subject_weak_concepts,
+    get_subject_weak_concepts,
+    get_student_misconceptions_by_subject,
 )
 from ai_engine.rl_engine import (
     generate_pattern_hash,
@@ -168,12 +172,12 @@ async def analyze_response(request: AnalyzeRequest):
 
         vulnerable_future_topics = get_knowledge_graph_predictions(historical_struggle)
 
-        # Retrieve Weak Concepts from DB mapping
+        # Retrieve subject-specific weak concepts from the new subject table.
         weak_concepts = []
         try:
-            res = supabase.table('users').select('weak_concepts').eq('student_id', student_id).single().execute()
-            if res.data and 'weak_concepts' in res.data:
-                weak_concepts = res.data['weak_concepts']
+            subject = (request.category or '').strip()
+            if subject:
+                weak_concepts = get_subject_weak_concepts(student_id, subject)
         except Exception as e:
             print(f"Error fetching weak_concepts: {e}")
 
@@ -327,18 +331,31 @@ async def detect_concepts(request: ConceptRequest):
 @app.post("/api/weak-concepts")
 async def register_weak_concepts(request: WeakConceptRequest):
     try:
-        # Fetch current
-        res = supabase.table('users').select('weak_concepts').eq('student_id', request.student_id).single().execute()
-        current_concepts = res.data.get('weak_concepts', []) if res.data else []
-        
-        # Merge unique
-        for c in request.concepts:
-            if c not in current_concepts:
-                current_concepts.append(c)
-                
-        # Update
-        supabase.table('users').update({'weak_concepts': current_concepts}).eq('student_id', request.student_id).execute()
-        return {"status": "success", "weak_concepts": current_concepts}
+        subject = (request.subject or '').strip()
+        if subject not in ALLOWED_CATEGORIES:
+            raise HTTPException(status_code=400, detail="Invalid subject.")
+
+        merged = upsert_subject_weak_concepts(
+            student_id=request.student_id,
+            subject=subject,
+            concepts=request.concepts,
+        )
+        return {
+            "status": "success",
+            "subject": subject,
+            "weak_concepts": merged,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/student/{student_id}/misconceptions-by-subject", response_model=SubjectMisconceptionResponse)
+async def get_misconceptions_by_subject(student_id: str):
+    try:
+        rows = get_student_misconceptions_by_subject(student_id)
+        return SubjectMisconceptionResponse(items=rows)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -216,6 +216,7 @@ export default function FloatingQuestionIngest() {
     try {
       await axios.post(`${apiUrl}/api/weak-concepts`, {
         student_id: studentId,
+        subject: parsed?.category || category,
         concepts: [concept]
       });
       setMarkedConcepts(prev => [...prev, concept]);

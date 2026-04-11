@@ -11,6 +11,7 @@ export default function Sidebar() {
     { icon: LayoutDashboard, label: 'Dashboard' },
     { icon: Compass, label: 'Learning Paths' },
     { icon: Activity, label: 'Performance' },
+    { icon: BookOpen, label: 'Subject Misconceptions' },
     { icon: ShieldCheck, label: 'Audit Trail' },
     { icon: Gauge, label: 'Reinforcement Lab' },
   ];

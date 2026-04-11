@@ -8,6 +8,7 @@ import StudentStatsOverview from '../components/StudentStatsOverview';
 import StudentHistory from '../components/StudentHistory';
 import AuditTrail from '../components/AuditTrail';
 import ReinforcementLab from '../components/ReinforcementLab';
+import StudentMisconceptionsBySubject from '../components/StudentMisconceptionsBySubject';
 
 export default function StudentDashboard() {
   const user = useStore((state) => state.user);
@@ -45,6 +46,7 @@ export default function StudentDashboard() {
           {currentView === 'Learning Paths' && <LearningHub />}
           {currentView === 'Dashboard' && <StudentStatsOverview />}
           {currentView === 'Performance' && <StudentHistory />}
+          {currentView === 'Subject Misconceptions' && <StudentMisconceptionsBySubject />}
           {currentView === 'Audit Trail' && <AuditTrail />}
           {currentView === 'Reinforcement Lab' && <ReinforcementLab />}
         </main>

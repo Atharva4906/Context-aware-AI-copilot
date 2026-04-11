@@ -299,3 +299,119 @@ def get_students() -> list:
     except Exception as e:
         print(f"Error fetching students: {e}")
         return []
+
+
+def upsert_subject_weak_concepts(student_id: str, subject: str, concepts: list[str]) -> list[str]:
+    """Upsert and merge weak concepts for a student's specific subject."""
+    try:
+        res = supabase.table('student_subject_weak_concepts') \
+            .select('id,weak_concepts') \
+            .eq('student_id', student_id) \
+            .eq('subject', subject).execute()
+
+        current_concepts = []
+        current_id = None
+        if res.data:
+            current_id = res.data[0].get('id')
+            current_concepts = res.data[0].get('weak_concepts') or []
+
+        merged = list(current_concepts)
+        for concept in concepts:
+            c = (concept or '').strip()
+            if c and c not in merged:
+                merged.append(c)
+
+        now = datetime.utcnow().isoformat()
+        if current_id:
+            supabase.table('student_subject_weak_concepts').update({
+                'weak_concepts': merged,
+                'updated_at': now,
+            }).eq('id', current_id).execute()
+        else:
+            supabase.table('student_subject_weak_concepts').insert({
+                'student_id': student_id,
+                'subject': subject,
+                'weak_concepts': merged,
+                'updated_at': now,
+            }).execute()
+
+        return merged
+    except Exception as e:
+        print(f"Error upserting subject weak concepts: {e}")
+        return []
+
+
+def get_subject_weak_concepts(student_id: str, subject: str) -> list[str]:
+    """Fetch weak concepts for one student in one subject."""
+    try:
+        res = supabase.table('student_subject_weak_concepts') \
+            .select('weak_concepts') \
+            .eq('student_id', student_id) \
+            .eq('subject', subject).execute()
+        if not res.data:
+            return []
+        return res.data[0].get('weak_concepts') or []
+    except Exception as e:
+        print(f"Error fetching subject weak concepts: {e}")
+        return []
+
+
+def get_student_misconceptions_by_subject(student_id: str) -> list[dict]:
+    """Return table-friendly subject-wise misconception rows with encounter stats."""
+    try:
+        subject_rows_res = supabase.table('student_subject_weak_concepts') \
+            .select('subject,weak_concepts') \
+            .eq('student_id', student_id).execute()
+        subject_rows = subject_rows_res.data if subject_rows_res.data else []
+
+        state_res = supabase.table('student_misconception_state') \
+            .select('status,encounter_count,last_triggered_at,common_misconceptions(topic)') \
+            .eq('student_id', student_id).execute()
+        states = state_res.data if state_res.data else []
+
+        topic_stats: dict[str, dict] = {}
+        for row in states:
+            cm = row.get('common_misconceptions') or {}
+            topic = (cm.get('topic') or '').strip()
+            if not topic:
+                continue
+            key = topic.lower()
+            stat = topic_stats.setdefault(key, {
+                'topic': topic,
+                'total_encounters': 0,
+                'resolved_count': 0,
+                'unresolved_count': 0,
+                'last_seen_at': None,
+            })
+            stat['total_encounters'] += int(row.get('encounter_count') or 0)
+            if (row.get('status') or '').lower() == 'resolved':
+                stat['resolved_count'] += 1
+            else:
+                stat['unresolved_count'] += 1
+            last_seen = row.get('last_triggered_at')
+            if last_seen and (not stat['last_seen_at'] or last_seen > stat['last_seen_at']):
+                stat['last_seen_at'] = last_seen
+
+        table_rows: list[dict] = []
+        for subject_row in subject_rows:
+            subject = subject_row.get('subject') or 'Unknown'
+            concepts = subject_row.get('weak_concepts') or []
+            for concept in concepts:
+                concept_name = (concept or '').strip()
+                if not concept_name:
+                    continue
+                stat = topic_stats.get(concept_name.lower(), {})
+                table_rows.append({
+                    'subject': subject,
+                    'concept': concept_name,
+                    'total_encounters': int(stat.get('total_encounters') or 0),
+                    'resolved_count': int(stat.get('resolved_count') or 0),
+                    'unresolved_count': int(stat.get('unresolved_count') or 0),
+                    'last_seen_at': stat.get('last_seen_at'),
+                })
+
+        table_rows.sort(key=lambda item: (item['subject'], -item['total_encounters'], item['concept']))
+        return table_rows
+    except Exception as e:
+        print(f"Error building misconceptions-by-subject table: {e}")
+        return []

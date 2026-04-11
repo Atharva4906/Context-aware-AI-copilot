@@ -90,6 +90,18 @@ CREATE TABLE IF NOT EXISTS question_answer_keys (
     )
 );
 
+-- 7c. Student Subject-wise Weak Concepts
+-- Keeps weak concepts segregated by subject without altering existing users table.
+CREATE TABLE IF NOT EXISTS student_subject_weak_concepts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_id UUID NOT NULL REFERENCES users(student_id) ON DELETE CASCADE,
+    subject TEXT NOT NULL CHECK (subject IN ('Math', 'Physics', 'English', 'Coding')),
+    weak_concepts TEXT[] DEFAULT '{}',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (student_id, subject)
+);
+
 -- 8. Alter Interaction Logs to support history dashboard
 -- Add columns to link interactions to specific questions and track resolution
 ALTER TABLE interaction_logs 

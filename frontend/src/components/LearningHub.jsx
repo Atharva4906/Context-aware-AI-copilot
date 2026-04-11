@@ -168,6 +168,7 @@ export default function LearningHub() {
     try {
       await axios.post(`${API()}/api/weak-concepts`, {
         student_id: studentId,
+        subject: currentLevel?.category,
         concepts: [concept]
       });
       setMarkedConcepts(prev => [...prev, concept]);

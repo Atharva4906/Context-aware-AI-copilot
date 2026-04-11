@@ -106,6 +106,7 @@ class ConceptRequest(BaseModel):
 
 class WeakConceptRequest(BaseModel):
     student_id: str
+    subject: str
     concepts: List[str]
 
 class MisconceptionReviewItem(BaseModel):
@@ -171,3 +172,16 @@ class StudentRosterItem(BaseModel):
 
 class StudentRosterResponse(BaseModel):
     students: List[StudentRosterItem]
+
+
+class SubjectMisconceptionRow(BaseModel):
+    subject: str
+    concept: str
+    total_encounters: int = 0
+    resolved_count: int = 0
+    unresolved_count: int = 0
+    last_seen_at: Optional[str] = None
+
+
+class SubjectMisconceptionResponse(BaseModel):
+    items: List[SubjectMisconceptionRow]
