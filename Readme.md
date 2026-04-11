@@ -4,7 +4,7 @@ Part 1: High-Level Architecture & System Overview
 The Problem: Traditional EdTech evaluation systems suffer from two fatal flaws:
 1.	Binary Grading Blindspots: They mark answers as simply "Right" or "Wrong," failing to detect underlying conceptual misunderstandings (e.g., a student arriving at the correct mathematical answer using entirely flawed logic). Over time, these undetected misconceptions accumulate, destroying foundational knowledge.
 2.	Contextual Amnesia: AI wrappers in education treat every interaction in a vacuum. They do not remember a student's historical struggles and treat a Day-1 beginner exactly the same as an advanced learner making a careless typo.
-The Solution: We are building a Context-Aware AI Co-Pilot. By combining the MiRAGE framework (Retrieval-Guided Multi-Stage Reasoning) with a Multi-Agent Orchestration (CrewAI) and a Reinforcement Learning (RL) State Tracker, we have engineered a system that diagnoses the exact logical fallacy a student is making and delivers highly personalized, Socratic feedback based on their unique learning history.
+The Solution: We are building a Context-Aware AI Co-Pilot. By combining the MiRAGE framework (Retrieval-Guided Multi-Stage Reasoning) with a State-Graph Orchestration (LangGraph) and a Reinforcement Learning (RL) State Tracker, we have engineered a system that diagnoses the exact logical fallacy a student is making and delivers highly personalized, Socratic feedback based on their unique learning history.
 ________________________________________
 1.2 Tech Stack & Component Mapping
 Every tool in our stack was chosen for maximum speed, scalability, and deterministic accuracy.
@@ -15,19 +15,21 @@ o	Role: The central nervous system. It handles API requests, manages state updat
 •	Database (Dual-Engine): Supabase
 o	Relational Engine (PostgreSQL): Acts as "The Student Memory." Tracks user profiles, historical misconceptions, and RL state (resolved vs. unresolved conceptual gaps).
 o	Vector Engine (pgvector): Acts as "The Encyclopedia." Stores embeddings of universal, well-documented "Common Misconceptions" to ground the AI and prevent hallucinations.
-•	AI Orchestration: CrewAI
-o	Role: Replaces a single, easily confused LLM prompt with a team of specialized AI agents (Diagnostic, Judge, and Tutor) that debate and verify logic before responding to the student.
-•	LLM Inference: Groq API
-o	Role: Powers the CrewAI agents. Groq's LPU (Language Processing Unit) architecture provides blistering fast inference speeds, allowing multiple agents to converse in the background while delivering real-time responses to the frontend.
+•	AI Orchestration: LangGraph + LangChain
+	o	Role: Replaces a single, easily confused LLM prompt with a compiled state graph containing specialized processing nodes (Reasoner, Explanation Analyzer, Judge, Tutor, and Architect) that flow through sequential steps to reason and verify logic before responding to the student.
+•	LLM Inference: Groq API (via LangChain)
+	o	Role: Powers the LangGraph nodes through LangChain's ChatGroq interface. Groq's LPU (Language Processing Unit) architecture provides blistering fast inference speeds, allowing the graph pipeline to execute multiple reasoning steps in the background while delivering real-time responses to the frontend.
 ________________________________________
 1.3 The "Diagnostic Funnel" Architecture (How it Works)
 Our architecture follows a strict 5-step pipeline to ensure high accuracy and deep personalization. When a student interacts with the platform (e.g., submits an answer or asks the Co-Pilot a question):
 1.	Retrieve (The Vector Grounding): * The backend takes the student's raw text and converts it into an embedding.
 o	It queries the Supabase pgvector database to instantly retrieve the Top-3 scientifically documented "Common Misconceptions" related to that topic.
 2.	Recall (The State Loading): * Simultaneously, the backend queries the Supabase Relational tables to load the student's historical profile (e.g., "This student is currently struggling with Variable Scope").
-3.	Reason & Rank (CrewAI Diagnostics): * The Reasoner Agent creates a logical step-by-step breakdown of the student's answer.
-o	The Judge Agent evaluates the Reasoner's breakdown against the Top-3 retrieved misconceptions AND the student's historical profile to pinpoint the exact conceptual error.
-4.	Respond (Socratic Generation): * The Tutor Agent drafts the final response. It actively references the student's past struggles to make the feedback feel hyper-personalized (e.g., "Just like the error we saw yesterday, look at how the data is flowing...").
+3.	Reason & Rank (LangGraph Diagnostics): * The Reasoner Node creates a logical step-by-step breakdown of the student's answer.
+		o	The Explanation Analyzer Node processes the extracted reasoning.
+		o	The Judge Node evaluates against the Top-3 retrieved misconceptions AND the student's historical profile to pinpoint the exact conceptual error.
+4.	Respond (Socratic Generation): * The Tutor Node drafts the final response. It actively references the student's past struggles to make the feedback feel hyper-personalized (e.g., "Just like the error we saw yesterday, look at how the data is flowing...").
+		o	The Architect Node generates a diagnostic MCQ tailored to the identified misconception.
 5.	Reinforce (The Assessment Loop): * The system generates a dynamic "Plausible Distractor" MCQ to verify if the student understood the feedback. The result updates their Reinforcement Learning state in Supabase, closing the loop.
 
 Part 2: Database Architecture & State Management (Supabase)
@@ -45,7 +47,7 @@ id	UUID (Primary Key)	Unique identifier for the misconception.
 topic	Text	The subject category (e.g., "Python Basics", "Algebra").
 flawed_logic_description	Text	The actual text of the misconception (e.g., "Student assumes variables are linked like spreadsheet cells").
 embedding	Vector(768)	The numerical representation of the flawed_logic_description for similarity search.
-remedial_strategy	Text	A pre-defined pedagogical hint to guide the CrewAI Tutor Agent.
+remedial_strategy	Text	A pre-defined pedagogical hint to guide the LangGraph Tutor Node.
 Note: During the hackathon, we will pre-populate this table with 10-15 highly specific entries to demonstrate the retrieval capability.
 2.3 The "Student Memory" Engine (Relational Storage)
 These tables represent the Reinforcement Learning (RL) state tracker. They give the "Floating Co-Pilot" its memory, tracking exactly what a specific user knows, what they struggle with, and how their understanding evolves over time.
@@ -64,7 +66,7 @@ status	Enum	Current RL state: unresolved, reviewing, or resolved.
 encounter_count	Integer	How many times the student has triggered this specific error.
 last_triggered_at	Timestamp	Used for spaced repetition logic.
 Table: interaction_logs
-Maintains the context window for the CrewAI agents.
+Maintains the context window for the LangGraph processing pipeline.
 Column Name	Data Type	Description
 log_id	UUID (Primary Key)	Unique log identifier.
 student_id	UUID (Foreign Key)	Links to the users table.
@@ -87,12 +89,12 @@ The system shifts responsibility. Students can view their historical, unresolved
 2.	State Check: FastAPI checks student_misconception_state.
 o	If no record exists, it inserts a new row with status = 'unresolved' and encounter_count = 1.
 o	If it exists, it increments encounter_count and updates last_triggered_at.
-3.	Context Injection: This state is passed to the CrewAI Tutor Agent. If encounter_count > 1, the Agent's prompt is dynamically adjusted to acknowledge the recurring struggle.
+3.	Context Injection: This state is passed through the LangGraph nodes. If encounter_count > 1, the Tutor Node's prompt is dynamically adjusted to acknowledge the recurring struggle.
 4.	The Reward (Resolution): When the student successfully passes a Diagnostic MCQ generated by the system, a backend trigger updates the status to 'resolved'. The system "learns" that the pedagogical intervention was successful and advances the student's curriculum.
 
 
-Part 3: Backend Orchestration & CrewAI Logic (FastAPI + Groq)
-This section details the backend engine. We use FastAPI for its asynchronous capabilities (crucial when streaming LLM responses) and CrewAI (powered by the Groq API) to handle the multi-agent reasoning.
+Part 3: Backend Orchestration & LangGraph Logic (FastAPI + LangChain + Groq)
+This section details the backend engine. We use FastAPI for its asynchronous capabilities (crucial when streaming LLM responses) and LangGraph (powered by LangChain and the Groq API) to handle the multi-stage reasoning through compiled state graphs.
 3.1 Backend Directory Structure
 A clean, modular architecture ensures the codebase is maintainable and scalable.
 Plaintext
@@ -101,9 +103,9 @@ backend/
 ├── database/
 │   └── supabase_client.py   # Supabase connection & pgvector queries
 ├── ai_engine/
-│   ├── agents.py            # CrewAI Agent definitions (Reasoner, Judge, Tutor)
-│   ├── tasks.py             # CrewAI Task definitions & Prompt templates
-│   └── crew_runner.py       # Orchestrates the sequential agent workflow
+├── graph_nodes.py       # LangGraph Node functions (Reasoner, Analyzer, Judge, Tutor, Architect)
+	│   ├── graph_states.py      # LangGraph TypedDict state schemas (ConceptState, VerificationState, DiagnosticState)
+	│   └── graph_runner.py      # Compiled StateGraph workflows & public runner functions
 ├── models/
 │   └── schemas.py           # Pydantic models for API request/response validation
 └── .env                     # Groq & Supabase API Keys
@@ -111,60 +113,78 @@ backend/
 When a student interacts with the Co-Pilot, the FastAPI endpoint POST /api/analyze-response is triggered. The backend executes the following asynchronous pipeline:
 1.	Extract Context: Fetch the student's historical state from student_misconception_state (Supabase).
 2.	Retrieve Baseline: Query the common_misconceptions table (Supabase pgvector) using the student's text to find the Top-3 closest matches.
-3.	Execute Crew: Pass the raw text, the historical context, and the retrieved vector matches into the CrewRunner.
+3.	Execute Graph: Pass the raw text, the historical context, and the retrieved vector matches into the compiled diagnostic graph via graph_runner.py.
 4.	Stream Response: Return the Tutor Agent's customized feedback and the Assessment Architect's MCQ back to the React frontend.
 ________________________________________
-3.3 CrewAI Agent Definitions (agents.py)
-Instead of a single, massive prompt, we initialize specialized agents using the ChatGroq LLM class (e.g., llama3-70b-8192 for deep reasoning, llama3-8b-8192 for faster drafting).
+3.3 LangGraph Node Definitions (graph_nodes.py & graph_states.py)
+Instead of a single, massive prompt, we define specialized node functions that flow through a compiled StateGraph. Each node receives a TypedDict state, calls the Groq LLM via LangChain, and returns a partial state update. The state accumulates results as it flows through the graph pipeline.
+
+Key Graphs:
+
+1. **concept_graph**: Single-node graph for extracting concepts from question content.
+2. **verification_graph**: Single-node graph for generating follow-up verification questions.
+3. **diagnostic_graph**: Multi-node pipeline (Reasoner → Analyzer → Judge → Tutor → Architect) for comprehensive student response analysis.
+
 Python
-from crewai import Agent
+from langgraph.graph import StateGraph, END
 from langchain_groq import ChatGroq
-import os
+from ai_engine.graph_states import DiagnosticState
 
-# Initialize Groq LLM
-groq_llm = ChatGroq(temperature=0.2, model_name="llama3-70b-8192", api_key=os.getenv("GROQ_API_KEY"))
+# Initialize Groq LLM instances
+groq_llm_70b = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.2)
+groq_llm_8b = ChatGroq(model="llama-3.1-8b-instant", temperature=0.4)
 
-# Agent 1: The Logical Tracker
-reasoner_agent = Agent(
-    role='Cognitive Logic Tracker',
-    goal='Map the step-by-step reasoning of the student without judging if it is right or wrong.',
-    backstory='You are an objective observer of mathematical and logical thought processes. You do not grade; you only trace the flow of logic.',
-    llm=groq_llm,
-    allow_delegation=False
-)
+# Node 1: Reasoner - Logical Tracker
+def reasoner_node(state: DiagnosticState) -> dict:
+    """Extract step-by-step reasoning from student answer without judgment."""
+    system = "You are an objective observer of mathematical and logical thought processes."
+    reasoning = _call(groq_llm_70b, system, state["user_query"])
+    return {"reasoning_extracted": reasoning}
 
-# Agent 2: The Verification Judge
-judge_agent = Agent(
-    role='Diagnostic Verifier',
-    goal='Match the student\'s logical trace to one of the scientifically documented common misconceptions provided to you.',
-    backstory='You are a strict, mathematically precise judge. You prevent hallucinations by ensuring the student\'s error perfectly aligns with a known, documented misconception.',
-    llm=groq_llm,
-    allow_delegation=False
-)
+# Node 2: Explanation Analyzer - Process Reasoning
+def explanation_analyzer_node(state: DiagnosticState) -> dict:
+    """Analyze the extracted reasoning in detail against context."""
+    diagnosis = analyze_explanation(state["reasoning_extracted"], state)
+    return {"explanation_diagnosis": diagnosis}
 
-# Agent 3: The Socratic Tutor
-tutor_agent = Agent(
-    role='Context-Aware Socratic Tutor',
-    goal='Draft highly personalized, guiding feedback that references the student\'s past struggles to help them realize their current mistake.',
-    backstory='You are an empathetic master teacher. You never just give the answer. You look at the student\'s historical struggles and use analogies that resonate with them.',
-    llm=groq_llm,
-    allow_delegation=False
-)
+# Node 3: Judge - Diagnostic Verifier
+def judge_node(state: DiagnosticState) -> dict:
+    """Match reasoning against known misconceptions and student history."""
+    system = "You are a strict judge. Match the reasoning to a documented misconception."
+    verdict = _call(groq_llm_70b, system, state["explanation_diagnosis"])
+    return {"misconception_verdict": verdict}
+
+# Node 4: Tutor - Socratic Response Generator
+def tutor_node(state: DiagnosticState) -> dict:
+    """Draft context-aware, Socratic feedback referencing student's history."""
+    system = "You are an empathetic Socratic tutor. Reference their past struggles and guide them."
+    feedback = _call(groq_llm_70b, system, state["misconception_verdict"])
+    return {"feedback_text": feedback}
+
+# Node 5: Architect - Assessment MCQ Generator
+def architect_node(state: DiagnosticState) -> dict:
+    """Generate diagnostic MCQ to verify student understanding."""
+    mcq = generate_diagnostic_mcq(state["misconception_verdict"], state)
+    return {"mcq_dict": mcq}
+
+# Compile Diagnostic StateGraph
+_diag_builder = StateGraph(DiagnosticState)
+_diag_builder.add_node("reasoner", reasoner_node)
+_diag_builder.add_node("analyzer", explanation_analyzer_node)
+_diag_builder.add_node("judge", judge_node)
+_diag_builder.add_node("tutor", tutor_node)
+_diag_builder.add_node("architect", architect_node)
+
+_diag_builder.set_entry_point("reasoner")
+_diag_builder.add_edge("reasoner", "analyzer")
+_diag_builder.add_edge("analyzer", "judge")
+_diag_builder.add_edge("judge", "tutor")
+_diag_builder.add_edge("tutor", "architect")
+_diag_builder.add_edge("architect", END)
+
+diagnostic_graph = _diag_builder.compile()
 ________________________________________
-3.4 CrewAI Task Definitions & Prompt Injection (tasks.py)
-The Tasks are where the Context (from Supabase) is injected into the LLM prompts. This is the exact mechanism that makes the Co-Pilot "Context-Aware."
-Task 1: Reasoning Extraction
-•	Input: Student's raw answer.
-•	Instruction: "Extract the mathematical steps the student took. Output a numbered list of their logical progression."
-Task 2: Misconception Verification (The MiRAGE Reranker)
-•	Input: Output from Task 1 + Top-3 Vector Database Results.
-•	Instruction: "Look at the logical trace. Compare it to these 3 known misconceptions: [Insert Supabase Vector Results]. Which one is the exact match? If none match perfectly, output 'Unique Error'. State your final diagnostic label clearly."
-Task 3: Contextual Feedback Generation (The Magic Step)
-•	Input: Final Diagnostic Label + Student's Historical Profile from Supabase.
-•	Instruction Template:
-Plaintext
-You are tutoring Student ID: {student_id}.
-They have just made this conceptual error: {diagnostic_label}.
+
 
 CRITICAL CONTEXT:
 Looking at their history, they have struggled with {historical_misconception_name} {encounter_count} times before.
@@ -193,7 +213,7 @@ JSON
     }
   ]
 }
-When the frontend renders this JSON and the student answers, FastAPI triggers a database update in Supabase, shifting their state from unresolved to resolved if they succeed.
+When the frontend renders this JSON and the student answers, FastAPI triggers a database update in Supabase, shifting their state from unresolved to resolved if they succeed. This completion also triggers an update to the RL diagnostic policy.
 
 
 Part 4: Frontend Architecture & UX Implementation (React + Tailwind)
@@ -225,14 +245,16 @@ JSON
 }
 Because the backend receives the student_id (to query historical database context) AND the current_context (what the user is looking at right now), the AI's response feels magically intuitive.
 4.4 Rendering the Agentic Workflow (Demo Magic)
-Judges love transparency in AI. Since CrewAI runs multiple agents (Reasoner $\rightarrow$ Judge $\rightarrow$ Tutor), returning a loading spinner for 5 seconds is bad UX.
+Judges love transparency in AI. Since LangGraph flows through multiple sequential nodes (Reasoner → Analyzer → Judge → Tutor → Architect), returning a loading spinner for 5 seconds is bad UX.
 Instead, the React frontend displays dynamic status updates to show the "brain" working:
 UX Flow for a Message Request:
 1.	0.0s: Student hits send.
-2.	0.5s: UI displays: 🧠 Analyzing logical steps... (Cognitive Tracker)
-3.	2.0s: UI displays: ⚖️ Verifying against known misconceptions... (Diagnostic Judge)
-4.	4.0s: UI displays: ✍️ Drafting personalized feedback... (Socratic Tutor)
-5.	4.5s: The final Markdown text streams into the chat window.
+0.5s: UI displays: 🧠 Extracting logical steps... (Reasoner)
+2.0s: UI displays: 📊 Analyzing reasoning pattern... (Explanation Analyzer)
+3.5s: UI displays: ⚖️ Verifying against known misconceptions... (Judge)
+4.5s: UI displays: ✍️ Drafting personalized feedback... (Tutor)
+5.0s: UI displays: 🏗️ Generating verification question... (Architect)
+5.5s: The final Markdown text and MCQ stream into the chat window.
 Implementation Note: FastAPI can stream these status flags via Server-Sent Events (SSE) or WebSockets before sending the final text payload.
 4.5 Rendering the Dynamic MCQ (The Assessment Tool)
 When the backend's Assessment Architect generates a diagnostic MCQ to test if the student learned from the feedback, the frontend renders it as an interactive card inside the chat flow.
@@ -241,12 +263,12 @@ Tailwind Component Logic:
 •	Map through the distractors and correct_answer arrays to render clickable buttons (hover:bg-blue-50 transition-colors).
 •	On Click:
 o	If correct: Trigger a green success state, fire an API call to FastAPI to update the Supabase RL state to resolved, and display a congratulatory message.
-o	If incorrect: The exact mapped_misconception_id tied to that distractor is sent back into the CrewAI loop, and the Tutor Agent provides immediate, hyper-specific feedback on why that exact distractor was a trap.
+o	If incorrect: The exact mapped_misconception_id tied to that distractor is sent back into the LangGraph pipeline, and the Tutor Node provides immediate, hyper-specific feedback on why that exact distractor was a trap.
 
 
 
 Part 5: Complete System Workflow & Data Flow Architecture
-To understand the true power of the Context-Aware AI Co-Pilot, we must trace the lifecycle of a single user interaction. The system operates as a continuous Reinforcement Learning loop, seamlessly integrating the React frontend, the FastAPI orchestrator, the Supabase dual-database engine, and the CrewAI multi-agent squad.
+To understand the true power of the Context-Aware AI Co-Pilot, we must trace the lifecycle of a single user interaction. The system operates as a continuous Reinforcement Learning loop, seamlessly integrating the React frontend, the FastAPI orchestrator, the Supabase dual-database engine, and the LangGraph state-based processing pipeline.
 5.1 The High-Level Architecture Diagram
 Here is how the components are physically wired together to enable the RL feedback loop:
 Plaintext
@@ -260,10 +282,12 @@ Plaintext
        │ 
   (3)  ├──► [ Supabase (PostgreSQL) ] --> Retrieves Student's Error Pattern & RL Policy Table
        │
-  (4)  └──► [ CrewAI + Groq API ]
-               ├─► Reasoner Agent (Logic Extraction)
-               ├─► Judge Agent (Misconception Verification)
-               └─► Tutor Agent (Generates Feedback + RL's Predicted Weakness)
+  (4)  └──► [ LangGraph StateGraph + Groq API ]
+               ├─► reasoner_node (Logic Extraction)
+               ├─► explanation_analyzer_node (Reasoning Analysis)
+               ├─► judge_node (Misconception Verification)
+               ├─► tutor_node (Generates Feedback + RL's Predicted Weakness)
+               └─► architect_node (Generates Assessment MCQ)
 5.2 Anatomy of a Request: The Execution Loop
 Let’s trace exactly what happens when a student repeatedly struggles and submits a flawed explanation.
 Step 1: The Trigger (Frontend $\rightarrow$ Backend)
@@ -276,11 +300,13 @@ Step 3: The RL Diagnostic Prediction ($\epsilon$-Greedy Policy)
 Before calling the LLM, the FastAPI backend acts as the RL Engine. It looks at the student's error pattern and checks the rl_diagnostic_policy table.
 •	Exploitation (90% of the time): It selects the fundamental weakness with the highest confidence score for this pattern (e.g., "Missing concept: Variable Initialization").
 •	Exploration (10% of the time): It randomly selects a different fundamental topic to test a new hypothesis.
-Step 4: Multi-Agent Orchestration (Backend $\leftrightarrow$ CrewAI)
-FastAPI compiles the retrieved fallacies and the RL Engine's predicted weakness into a prompt for CrewAI. The agents execute instantly via the Groq API:
-1.	The Reasoner Agent maps the student's step-by-step logic.
-2.	The Judge Agent verifies this logic against the MiRAGE vector fallacies to confirm the exact error in the current question.
-3.	The Tutor Agent drafts the response. Because it was injected with the RL prediction, it writes: "You made a scope error here. But looking at your recent questions, I'm noticing a pattern. Are you struggling with the fundamental concept of Variable Initialization? Should we review that?"
+Step 4: LangGraph State Pipeline Execution (Backend ↔ LangGraph + Groq)
+FastAPI compiles the retrieved fallacies and the RL Engine's predicted weakness into the initial state for the diagnostic_graph. The graph executes the 5-node pipeline sequentially via the Groq API:
+1.	The reasoner_node extracts the student's step-by-step logic.
+2.	The explanation_analyzer_node processes and analyzes the extracted reasoning.
+3.	The judge_node verifies this logic against the MiRAGE vector fallacies to confirm the exact error in the current question.
+4.	The tutor_node drafts the response. Because it was injected with the RL prediction, it writes: "You made a scope error here. But looking at your recent questions, I'm noticing a pattern. Are you struggling with the fundamental concept of Variable Initialization? Should we review that?"
+5.	The architect_node generates a diagnostic MCQ based on the misconception verdict.
 Step 5: The Response (Backend $\rightarrow$ Frontend)
 FastAPI streams this highly personalized, intuitive message back to the React frontend. The UI displays the message along with two interactive feedback buttons: [Yes, let's review] and [No, I understand it].
 Step 6: Human-in-the-Loop Reward Update (The Learning Math)
@@ -349,5 +375,5 @@ def update_rl_policy(pattern_hash: str, suggested_topic: str, student_feedback: 
     }).execute()
 6.6 The Value Proposition (The Pitch)
 "Judges, most AI tutors are arrogant; they assume their diagnosis is always right. We built our Reinforcement Learning engine to be collaborative.
-By utilizing a Contextual Bandit algorithm, our AI recognizes error patterns and predicts underlying weaknesses. But if the AI is wrong, the student can explicitly reject the diagnosis. The RL engine registers this as a negative reward, instantly applies the update rule to its Q-value, and stops bothering the student with redundant fundamentals. The AI mathematically learns the student's actual cognitive profile through conversation, making it a highly empathetic, adaptive, and mathematically rigorous co-pilot."
+By utilizing a Contextual Bandit algorithm, our AI recognizes error patterns and predicts underlying weaknesses. But if the AI is wrong, the student can explicitly reject the diagnosis. The RL engine registers this as a negative reward, instantly applies the update rule to its Q-value, and stops bothering the student with redundant fundamentals. The LangGraph pipeline ensures each reasoning step is transparent and modular, making it easy to debug and improve individual nodes. The AI mathematically learns the student's actual cognitive profile through conversation, making it a highly empathetic, adaptive, and mathematically rigorous co-pilot."
 
