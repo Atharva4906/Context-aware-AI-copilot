@@ -1,6 +1,10 @@
+from datetime import datetime
+import os
+from pathlib import Path
 from typing import Optional
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from models.schemas import (
     AnalyzeRequest, 
     AnalyzeResponse, 
@@ -27,6 +31,8 @@ from models.schemas import (
     UpdateMisconceptionStatusRequest,
     StudentRosterResponse,
     SubjectMisconceptionResponse,
+    ManimScriptRequest,
+    ManimScriptResponse,
 )
 from database.supabase_client import (
     get_supabase_client,
@@ -68,8 +74,16 @@ from ai_engine.graph_nodes import (
     propose_misconception_candidate,
     suggest_curriculum_edges
 )
+from ai_engine.simulation_engine import build_simulation_payload, build_manim_script, render_manim_video
 
 app = FastAPI(title="Context-Aware AI Co-Pilot API")
+
+BACKEND_DIR = Path(__file__).resolve().parent
+MANIM_SCRIPTS_DIR = BACKEND_DIR / "manim_scripts"
+MANIM_SCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
+MANIM_MEDIA_DIR = MANIM_SCRIPTS_DIR / "media"
+MANIM_MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/generated-media", StaticFiles(directory=str(MANIM_SCRIPTS_DIR)), name="generated-media")
 
 # Configure CORS
 app.add_middleware(
@@ -141,8 +155,20 @@ async def analyze_response(request: AnalyzeRequest):
         current_context = request.current_context
         student_explanation = (request.student_explanation or "").strip()
 
+        is_correct_submission = bool(request.is_correct)
+        if request.question_id and not request.is_follow_up:
+            try:
+                answer_key_map = get_question_answer_keys([request.question_id])
+                answer_key = answer_key_map.get(request.question_id, {})
+                canonical_answer = (answer_key.get("correct_answer") or "").strip().lower()
+                submitted_answer = (user_query or "").strip().lower()
+                if canonical_answer:
+                    is_correct_submission = submitted_answer == canonical_answer
+            except Exception as answer_check_error:
+                print(f"[analyze_response] answer-key lookup failed: {answer_check_error}")
+
         # Stage 1: Is this a correct answer that needs verification questions?
-        if request.is_correct and not request.is_follow_up:
+        if is_correct_submission and not request.is_follow_up:
             # We must generate 2 logic questions
             questions = run_logic_verification_questions(current_context)
             return AnalyzeResponse(
@@ -231,7 +257,7 @@ async def analyze_response(request: AnalyzeRequest):
         # Ideally we fetch the real correct answer from DB using request.question_id
         true_answer = "Determined by logic."
         
-        feedback_text, mcq_dict, misconception_verdict = run_diagnostic_crew(
+        feedback_text, mcq_dict, misconception_verdict, simulation_spec = run_diagnostic_crew(
             student_id=student_id,
             user_query=analysis_input,
             current_context=current_context,
@@ -245,6 +271,37 @@ async def analyze_response(request: AnalyzeRequest):
             true_answer=true_answer,
             student_explanation=student_explanation
         )
+
+        if not isinstance(simulation_spec, dict):
+            simulation_spec = {}
+
+        auto_render_manim = os.getenv("AUTO_RENDER_MANIM", "true").strip().lower() in {"1", "true", "yes", "on"}
+        if auto_render_manim and simulation_spec:
+            try:
+                render_info = render_manim_video(
+                    simulation=simulation_spec,
+                    scene_name=os.getenv("MANIM_SCENE_NAME", "ConceptEvolutionScene"),
+                    env_name=os.getenv("MANIM_ENV_NAME", "manim_env"),
+                    timeout_seconds=int(os.getenv("MANIM_RENDER_TIMEOUT_SECONDS", "150")),
+                )
+                simulation_spec.setdefault("manim", {})
+                simulation_spec["manim"].update(render_info)
+                relative_video_path = render_info.get("video_relative_path")
+                if relative_video_path:
+                    simulation_spec["manim"]["video_url"] = f"/generated-media/{relative_video_path}"
+                else:
+                    if simulation_spec.get("plotly_figure"):
+                        simulation_spec["engine"] = "plotly"
+                        simulation_spec.setdefault("fallback", {})["active"] = "plotly"
+            except Exception as render_error:
+                simulation_spec.setdefault("manim", {})
+                simulation_spec["manim"].update({
+                    "status": "failed",
+                    "error": str(render_error),
+                })
+                if simulation_spec.get("plotly_figure"):
+                    simulation_spec["engine"] = "plotly"
+                    simulation_spec.setdefault("fallback", {})["active"] = "plotly"
 
         # Use the AI-detected misconception as the definitive topic for logs and UI
         # We extract a short label from the detailed verdict paragraph
@@ -311,6 +368,7 @@ async def analyze_response(request: AnalyzeRequest):
             needs_verification=False,
             feedback=feedback_text,
             mcq=mcq_dict,
+            simulation=simulation_spec,
             predicted_topic=final_detected_topic,
             pattern_hash=pattern_hash
         )
@@ -325,6 +383,40 @@ async def detect_concepts(request: ConceptRequest):
     try:
         concepts = run_concept_extraction(request.question_content)
         return {"concepts": concepts}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/simulations/manim-script", response_model=ManimScriptResponse)
+async def generate_manim_script(request: ManimScriptRequest):
+    try:
+        simulation = request.simulation or build_simulation_payload(
+            current_context=request.current_context,
+            predicted_topic=request.predicted_topic or "",
+            misconception_verdict=request.misconception_verdict or "",
+        )
+        manim_bundle = build_manim_script(simulation=simulation, scene_name=request.scene_name or "ConceptEvolutionScene")
+
+        scene_name = manim_bundle["scene_name"]
+        script = manim_bundle["script"]
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        scripts_dir = Path(__file__).resolve().parent / "manim_scripts"
+        scripts_dir.mkdir(parents=True, exist_ok=True)
+        file_name = f"{scene_name}_{timestamp}.py"
+        script_path = scripts_dir / file_name
+        script_path.write_text(script, encoding="utf-8")
+
+        relative_file_path = f"backend/manim_scripts/{file_name}"
+        command = f"manim {file_name} {scene_name}"
+
+        return ManimScriptResponse(
+            scene_name=scene_name,
+            file_name=file_name,
+            file_path=relative_file_path,
+            command=command,
+            script=script,
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
 import { useStore } from '../store/useStore';
+import SimulationView from './SimulationView';
 import { 
   Sparkles, X, Send, AlertCircle, Bot, 
   ThumbsUp, ThumbsDown, Activity, Target, 
@@ -47,6 +48,7 @@ export default function FloatingQuestionIngest() {
   const [followUpAnswers, setFollowUpAnswers] = useState({});
   const [studentExplanation, setStudentExplanation] = useState('');
   const [tutorFeedback, setTutorFeedback] = useState(null);
+  const [simulationSpec, setSimulationSpec] = useState(null);
   const [patternHash, setPatternHash] = useState(null);
   const [predictedTopic, setPredictedTopic] = useState(null);
   const [rlSubmitted, setRlSubmitted] = useState(false);
@@ -161,6 +163,7 @@ export default function FloatingQuestionIngest() {
     setFollowUpAnswers({});
     setStudentExplanation('');
     setTutorFeedback(null);
+    setSimulationSpec(null);
     setPatternHash(null);
     setPredictedTopic(null);
     setRlSubmitted(false);
@@ -265,14 +268,17 @@ export default function FloatingQuestionIngest() {
       if (data.needs_verification && !isFollowUpSubmit) {
         setNeedsVerification(true);
         setFollowUpQuestions(data.follow_up_questions || []);
+        setSimulationSpec(null);
       } else {
         setNeedsVerification(false);
         setTutorFeedback(data.feedback);
+        setSimulationSpec(data.simulation || null);
         if (data.pattern_hash) setPatternHash(data.pattern_hash);
         if (data.predicted_topic) setPredictedTopic(data.predicted_topic);
       }
     } catch (submitError) {
       setTutorFeedback('Failed to reach the AI server. Please try again.');
+      setSimulationSpec(null);
     } finally {
       setIsSubmitting(false);
     }
@@ -544,6 +550,8 @@ export default function FloatingQuestionIngest() {
                   </div>
                 );
               })}
+
+              {simulationSpec && <SimulationView simulation={simulationSpec} />}
             </div>
 
             {predictedTopic && !rlSubmitted && (

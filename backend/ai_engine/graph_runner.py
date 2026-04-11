@@ -19,6 +19,7 @@ from ai_engine.graph_nodes import (
     judge_node,
     tutor_node,
     architect_node,
+    simulation_node,
 )
 
 # ─── 1. Concept-extraction graph ─────────────────────────────────────────────
@@ -44,13 +45,15 @@ _diag_builder.add_node("explanation_analyzer", explanation_analyzer_node)
 _diag_builder.add_node("judge",     judge_node)
 _diag_builder.add_node("tutor",     tutor_node)
 _diag_builder.add_node("architect", architect_node)
+_diag_builder.add_node("simulation", simulation_node)
 
 _diag_builder.set_entry_point("reasoner")
 _diag_builder.add_edge("reasoner", "explanation_analyzer")
 _diag_builder.add_edge("explanation_analyzer", "judge")
 _diag_builder.add_edge("judge", "tutor")
 _diag_builder.add_edge("tutor", "architect")
-_diag_builder.add_edge("architect", END)
+_diag_builder.add_edge("architect", "simulation")
+_diag_builder.add_edge("simulation", END)
 diagnostic_graph = _diag_builder.compile()
 
 
@@ -84,7 +87,7 @@ def run_diagnostic_crew(
 ) -> tuple:
     """
     Executes the multi-node diagnostic graph.
-    Returns (feedback_text: str, mcq_dict: dict, misconception_verdict: str)
+    Returns (feedback_text, mcq_dict, misconception_verdict, simulation_spec)
     """
     initial_state: DiagnosticState = {
         "student_id": student_id,
@@ -105,6 +108,7 @@ def run_diagnostic_crew(
         "misconception_verdict": "",
         "feedback_text": "",
         "mcq_dict": {},
+        "simulation_spec": {},
     }
 
     print(f"[LangGraph] Starting Diagnostic Graph for Student: {student_id}")
@@ -113,4 +117,5 @@ def run_diagnostic_crew(
     feedback_text         = result.get("feedback_text", "No feedback generated.")
     mcq_dict              = result.get("mcq_dict", {})
     misconception_verdict = result.get("misconception_verdict", "")
-    return feedback_text, mcq_dict, misconception_verdict
+    simulation_spec       = result.get("simulation_spec", {})
+    return feedback_text, mcq_dict, misconception_verdict, simulation_spec

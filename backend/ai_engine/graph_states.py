@@ -38,3 +38,4 @@ class DiagnosticState(TypedDict):
     # ---- Final outputs (run in parallel) ----
     feedback_text: str                # set by tutor_node
     mcq_dict: dict                    # set by architect_node
+    simulation_spec: dict             # set by simulation_node

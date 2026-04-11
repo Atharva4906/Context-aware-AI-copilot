@@ -12,6 +12,7 @@ from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from ai_engine.graph_states import ConceptState, VerificationState, DiagnosticState
+from ai_engine.simulation_engine import build_simulation_payload
 
 load_dotenv()
 
@@ -378,6 +379,20 @@ def architect_node(state: DiagnosticState) -> dict:
     except Exception:
         mcq_dict = {}
     return {"mcq_dict": mcq_dict}
+
+
+def simulation_node(state: DiagnosticState) -> dict:
+    """Create a safe template-based interactive simulation payload."""
+    try:
+        simulation_spec = build_simulation_payload(
+            current_context=state.get("current_context", ""),
+            predicted_topic=state.get("predicted_rl_topic", ""),
+            misconception_verdict=state.get("misconception_verdict", ""),
+        )
+    except Exception as e:
+        print(f"[simulation_node] error: {e}")
+        simulation_spec = {}
+    return {"simulation_spec": simulation_spec}
 
 
 # ─── Standalone: detect correct answer for a question ───────────────────────

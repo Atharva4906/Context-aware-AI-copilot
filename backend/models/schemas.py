@@ -32,6 +32,7 @@ class AnalyzeResponse(BaseModel):
     follow_up_questions: Optional[List[dict]] = None
     feedback: Optional[str] = None
     mcq: Optional[dict] = None
+    simulation: Optional[dict] = None
     # Debug/Diagnostic data below (optional, but good for UI transparency)
     predicted_topic: Optional[str] = None
     pattern_hash: Optional[str] = None
@@ -185,3 +186,19 @@ class SubjectMisconceptionRow(BaseModel):
 
 class SubjectMisconceptionResponse(BaseModel):
     items: List[SubjectMisconceptionRow]
+
+
+class ManimScriptRequest(BaseModel):
+    current_context: str
+    predicted_topic: Optional[str] = None
+    misconception_verdict: Optional[str] = None
+    scene_name: Optional[str] = "ConceptEvolutionScene"
+    simulation: Optional[dict] = None
+
+
+class ManimScriptResponse(BaseModel):
+    scene_name: str
+    file_name: str
+    file_path: str
+    command: str
+    script: str

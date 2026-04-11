@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef, useMemo } from 'react';
 import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
 import { useStore } from '../store/useStore';
+import SimulationView from './SimulationView';
 import { 
   CheckCircle2, FileText, BrainCircuit, Target, 
   Plus, ThumbsUp, ThumbsDown, Search, Sparkles, Filter 
@@ -34,6 +35,7 @@ export default function LearningHub() {
   const [followUpAnswers, setFollowUpAnswers]   = useState({});
   const [studentExplanation, setStudentExplanation] = useState('');
   const [tutorFeedback, setTutorFeedback]     = useState(null);
+  const [simulationSpec, setSimulationSpec]   = useState(null);
   const [patternHash, setPatternHash]         = useState(null);
   const [predictedTopic, setPredictedTopic]   = useState(null);
   const [rlSubmitted, setRlSubmitted]         = useState(false);
@@ -124,10 +126,16 @@ export default function LearningHub() {
     setFollowUpAnswers({});
     setStudentExplanation('');
     setTutorFeedback(null);
+    setSimulationSpec(null);
     setPatternHash(null);
     setPredictedTopic(null);
     setRlSubmitted(false);
     setCorrectIndex(null);
+
+    if (Number.isInteger(currentLevel?.correct_answer_index)) {
+      setCorrectIndex(currentLevel.correct_answer_index);
+      return;
+    }
 
     if (currentLevel.options?.length) {
       axios.post(`${API()}/api/detect-answer`, {
@@ -136,8 +144,8 @@ export default function LearningHub() {
       }).then(res => {
         setCorrectIndex(res.data.correct_index);
       }).catch(err => {
-        console.warn('[detect-answer] failed, falling back to index 0', err);
-        setCorrectIndex(0);
+        console.warn('[detect-answer] failed, forcing incorrect-index fallback', err);
+        setCorrectIndex(-1);
       });
     }
   }, [currentLevel]);
@@ -210,15 +218,18 @@ export default function LearningHub() {
       if (data.needs_verification && !isFollowUpSubmit) {
         setNeedsVerification(true);
         setFollowUpQuestions(data.follow_up_questions || []);
+        setSimulationSpec(null);
       } else {
         setNeedsVerification(false);
         setTutorFeedback(data.feedback);
+        setSimulationSpec(data.simulation || null);
         if (data.pattern_hash)  setPatternHash(data.pattern_hash);
         if (data.predicted_topic) setPredictedTopic(data.predicted_topic);
       }
     } catch (e) {
       console.error(e);
       setTutorFeedback('Failed to reach the AI server. Please try again.');
+      setSimulationSpec(null);
     } finally {
       setIsSubmitting(false);
     }
@@ -527,6 +538,8 @@ export default function LearningHub() {
                       </div>
                     </div>
                   ))}
+
+                  {simulationSpec && <SimulationView simulation={simulationSpec} />}
                 </div>
 
                 {/* ── RL Feedback section ── */}
