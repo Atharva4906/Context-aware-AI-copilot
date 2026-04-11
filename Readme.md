@@ -4,7 +4,7 @@ Part 1: High-Level Architecture & System Overview
 The Problem: Traditional EdTech evaluation systems suffer from two fatal flaws:
 1.	Binary Grading Blindspots: They mark answers as simply "Right" or "Wrong," failing to detect underlying conceptual misunderstandings (e.g., a student arriving at the correct mathematical answer using entirely flawed logic). Over time, these undetected misconceptions accumulate, destroying foundational knowledge.
 2.	Contextual Amnesia: AI wrappers in education treat every interaction in a vacuum. They do not remember a student's historical struggles and treat a Day-1 beginner exactly the same as an advanced learner making a careless typo.
-The Solution: We are building a Context-Aware AI Co-Pilot. By combining the MiRAGE framework (Retrieval-Guided Multi-Stage Reasoning) with a Multi-Agent Orchestration (CrewAI) and a Reinforcement Learning (RL) State Tracker, we have engineered a system that diagnoses the exact logical fallacy a student is making and delivers highly personalized, Socratic feedback based on their unique learning history.
+The Solution: We are building a Context-Aware AI Co-Pilot. By combining the MiRAGE framework (Retrieval-Guided Multi-Stage Reasoning) with a State-Graph Orchestration (LangGraph) and a Reinforcement Learning (RL) State Tracker, we have engineered a system that diagnoses the exact logical fallacy a student is making and delivers highly personalized, Socratic feedback based on their unique learning history.
 ________________________________________
 1.2 Tech Stack & Component Mapping
 Every tool in our stack was chosen for maximum speed, scalability, and deterministic accuracy.
