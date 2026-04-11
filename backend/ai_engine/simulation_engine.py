@@ -5,6 +5,7 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Tuple
+from urllib.parse import quote_plus
 
 try:
     import numpy as np
@@ -52,6 +53,19 @@ def _keyword_engine_selector(source: str) -> str:
     if any(word in text for word in p5_words):
         return "p5"
     return DEFAULT_ENGINE
+
+
+def _build_reference_image(source_text: str, fallback_label: str) -> Dict:
+    query = re.sub(r"\s+", " ", (source_text or "").strip())
+    if not query:
+        query = (fallback_label or "math concept visual").strip()
+    encoded_query = quote_plus(query)
+    caption = (fallback_label or "Reference image").strip()
+    return {
+        "reference_image_url": f"https://source.unsplash.com/1200x700/?{encoded_query},diagram",
+        "reference_image_caption": caption,
+        "reference_image_query": query,
+    }
 
 
 def _pick_expression(source: str) -> Tuple[str, str, Tuple[float, float]]:
@@ -322,6 +336,10 @@ def _build_rectangle_problem_payload(current_context: str, predicted_topic: str)
         ],
         "python_stack": _python_stack_meta(equation_latex),
         "problem_context_hint": (predicted_topic or "").strip(),
+        **_build_reference_image(
+            source_text="rectangle perimeter area geometry diagram",
+            fallback_label="Rectangle perimeter-area geometry reference",
+        ),
     }
 
 
@@ -360,7 +378,9 @@ def build_simulation_payload(current_context: str, predicted_topic: str, misconc
     if statement_payload:
         return statement_payload
 
-    source = "\n".join([current_context or "", predicted_topic or "", misconception_verdict or ""])
+    primary_source = (current_context or "").strip()
+    fallback_source = "\n".join([predicted_topic or "", misconception_verdict or ""]).strip()
+    source = primary_source or fallback_source or "core concept visualization"
     engine = _keyword_engine_selector(source)
 
     expression, title, domain = _pick_expression(source)
@@ -386,6 +406,10 @@ def build_simulation_payload(current_context: str, predicted_topic: str, misconc
         "plotly_figure": _build_plotly_figure(samples, title),
         "markers": samples.get("markers", []),
         "python_stack": _python_stack_meta(samples.get("latex", expression)),
+        **_build_reference_image(
+            source_text=source,
+            fallback_label=f"{title} reference image",
+        ),
     }
 
     # Safety guard: keep rendered engine deterministic and template-bound.
@@ -413,13 +437,56 @@ def _safe_expression(expr: str) -> str:
     return expression
 
 
+def _manim_expression_for_numpy(expression: str) -> str:
+    mapped = _safe_expression(expression).replace("^", "**")
+    for fn_name in ("sin", "cos", "tan", "exp", "sqrt", "log"):
+        mapped = re.sub(rf"\b{fn_name}\s*\(", f"np.{fn_name}(", mapped)
+    mapped = re.sub(r"\bpi\b", "np.pi", mapped)
+    return mapped
+
+
 def build_manim_script(simulation: Dict, scene_name: str = "ConceptEvolutionScene") -> Dict:
     safe_scene = _sanitize_scene_name(scene_name)
     expression = _safe_expression(simulation.get("expression", "x**2 - 1"))
+    manim_expression = _manim_expression_for_numpy(expression)
     domain = simulation.get("domain", {})
     x_min = float(domain.get("min", -6.0))
     x_max = float(domain.get("max", 6.0))
     title = (simulation.get("title") or "Concept Explorer").replace("\"", "")
+
+    if simulation.get("p5", {}).get("mode") == "rectangle":
+        rect_length = float(simulation.get("p5", {}).get("length", 1.0))
+        rect_width = float(simulation.get("p5", {}).get("width", 1.0))
+        rect_area = float(simulation.get("p5", {}).get("area", rect_length * rect_width))
+        rect_perimeter = float(simulation.get("p5", {}).get("perimeter", 2 * (rect_length + rect_width)))
+        safe_len = max(rect_length, 0.1)
+        aspect = max(0.2, min(2.8, rect_width / safe_len))
+        draw_w = 6.0
+        draw_h = max(1.6, min(4.8, draw_w * aspect))
+
+        script = f'''from manim import *
+
+
+class {safe_scene}(Scene):
+    def construct(self):
+        title = Text("{title}", font_size=34)
+        title.to_edge(UP)
+
+        rect = Rectangle(width={draw_w:.3f}, height={draw_h:.3f}, color=GREEN, fill_opacity=0.25)
+        length_label = Text("length = {rect_length:.2f}", font_size=26).next_to(rect, DOWN)
+        width_label = Text("width = {rect_width:.2f}", font_size=26).next_to(rect, LEFT)
+        summary = Text("Perimeter = {rect_perimeter:.2f} | Area = {rect_area:.2f}", font_size=24).to_edge(DOWN)
+
+        self.play(FadeIn(title, shift=UP * 0.2), run_time=0.7)
+        self.play(Create(rect), run_time=1.2)
+        self.play(Write(length_label), Write(width_label), run_time=1.0)
+        self.play(Write(summary), run_time=0.8)
+        self.wait(1.2)
+'''
+        return {
+            "scene_name": safe_scene,
+            "script": script,
+        }
 
     script = f'''from manim import *
 import numpy as np
@@ -440,7 +507,7 @@ class {safe_scene}(Scene):
         )
         labels = axes.get_axis_labels(x_label="x", y_label="f(x)")
 
-        curve = axes.plot(lambda x: {expression}, x_range=[{x_min:.3f}, {x_max:.3f}], color=GREEN)
+        curve = axes.plot(lambda x: {manim_expression}, x_range=[{x_min:.3f}, {x_max:.3f}], color=GREEN)
         formula = MathTex(r"f(x) = {simulation.get("equation_latex", expression)}")
         formula.scale(0.85)
         formula.next_to(axes, DOWN)
@@ -487,83 +554,85 @@ def render_manim_video(
 
     explicit_manim_python = os.environ.get("MANIM_PYTHON_EXE", "").strip()
     if explicit_manim_python:
-        cmd = [
-            explicit_manim_python,
-            "-m",
-            "manim",
-            script_name,
-            safe_scene,
-            "-ql",
-            "--format=mp4",
-        ]
+        base_cmd = [explicit_manim_python, "-m", "manim", script_name, safe_scene]
     else:
         conda_exe = os.environ.get("CONDA_EXE", "conda")
-        cmd = [
-            conda_exe,
-            "run",
-            "-n",
-            env_name,
-            "python",
-            "-m",
-            "manim",
-            script_name,
-            safe_scene,
-            "-ql",
-            "--format=mp4",
-        ]
+        base_cmd = [conda_exe, "run", "-n", env_name, "python", "-m", "manim", script_name, safe_scene]
 
-    try:
-        run_result = subprocess.run(
-            cmd,
-            cwd=str(scripts_dir),
-            capture_output=True,
-            text=True,
-            timeout=max(30, int(timeout_seconds)),
-            check=False,
+    video_cmd = [*base_cmd, "-ql", "--format=mp4", "--media_dir", "media"]
+    image_cmd = [*base_cmd, "-ql", "-s", "--format=png", "--media_dir", "media"]
+
+    def _run(cmd: List[str]) -> tuple:
+        try:
+            res = subprocess.run(
+                cmd,
+                cwd=str(scripts_dir),
+                capture_output=True,
+                text=True,
+                timeout=max(30, int(timeout_seconds)),
+                check=False,
+            )
+            return True, res
+        except Exception as ex:
+            return False, ex
+
+    video_ok, video_result = _run(video_cmd)
+    video_tail = ""
+    if video_ok:
+        video_tail = _tail(f"{video_result.stdout}\n{video_result.stderr}")
+    else:
+        video_tail = str(video_result)
+
+    if video_ok and getattr(video_result, "returncode", 1) == 0:
+        video_candidates = sorted(
+            (scripts_dir / "media").glob(f"**/{safe_scene}.mp4"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
         )
-    except Exception as e:
-        return {
-            "status": "failed",
-            "script_name": script_name,
-            "scene_name": safe_scene,
-            "error": str(e),
-            "command": " ".join(cmd),
-        }
+        if video_candidates:
+            video_path = video_candidates[0]
+            relative_video_path = str(video_path.relative_to(scripts_dir)).replace("\\", "/")
+            return {
+                "status": "rendered",
+                "script_name": script_name,
+                "scene_name": safe_scene,
+                "command": " ".join(video_cmd),
+                "video_relative_path": relative_video_path,
+                "render_log_tail": video_tail,
+            }
 
-    output_tail = _tail(f"{run_result.stdout}\n{run_result.stderr}")
-    if run_result.returncode != 0:
-        return {
-            "status": "failed",
-            "script_name": script_name,
-            "scene_name": safe_scene,
-            "return_code": run_result.returncode,
-            "command": " ".join(cmd),
-            "error": output_tail or "Manim render failed.",
-        }
+    image_ok, image_result = _run(image_cmd)
+    image_tail = ""
+    if image_ok:
+        image_tail = _tail(f"{image_result.stdout}\n{image_result.stderr}")
+    else:
+        image_tail = str(image_result)
 
-    video_root = scripts_dir / "media" / "videos" / script_path.stem
-    candidates = sorted(
-        video_root.glob(f"**/{safe_scene}.mp4"),
-        key=lambda p: p.stat().st_mtime,
-        reverse=True,
-    )
-    if not candidates:
-        return {
-            "status": "failed",
-            "script_name": script_name,
-            "scene_name": safe_scene,
-            "command": " ".join(cmd),
-            "error": "Render completed but output video was not found.",
-        }
-
-    video_path = candidates[0]
-    relative_video_path = str(video_path.relative_to(scripts_dir)).replace("\\", "/")
-
+    if image_ok and getattr(image_result, "returncode", 1) == 0:
+        image_candidates = sorted(
+            (scripts_dir / "media").glob(f"**/{safe_scene}.png"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        if image_candidates:
+            image_path = image_candidates[0]
+            relative_image_path = str(image_path.relative_to(scripts_dir)).replace("\\", "/")
+            return {
+                "status": "rendered-image",
+                "script_name": script_name,
+                "scene_name": safe_scene,
+                "command": " ".join(video_cmd),
+                "fallback_command": " ".join(image_cmd),
+                "video_relative_path": relative_image_path,
+                "error": video_tail or "mp4 render failed; using png output",
+                "render_log_tail": _tail(f"{video_tail}\n{image_tail}", max_len=1200),
+            }
     return {
-        "status": "rendered",
+        "status": "failed",
         "script_name": script_name,
         "scene_name": safe_scene,
-        "command": " ".join(cmd),
-        "video_relative_path": relative_video_path,
-        "render_log_tail": output_tail,
+        "command": " ".join(video_cmd),
+        "fallback_command": " ".join(image_cmd),
+        "error": _tail(video_tail or "Manim render failed.", max_len=1200),
+        "render_log_tail": _tail(f"{video_tail}\n{image_tail}", max_len=1200),
     }

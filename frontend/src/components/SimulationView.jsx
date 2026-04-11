@@ -21,6 +21,9 @@ export default function SimulationView({ simulation }) {
   const videoUrl = manim.video_url
     ? (manim.video_url.startsWith('http') ? manim.video_url : `${apiBaseUrl}${manim.video_url}`)
     : null;
+  const isImageMedia = !!videoUrl && /\.(png|jpe?g|webp)$/i.test(videoUrl.split('?')[0]);
+  const referenceImageUrl = simulation.reference_image_url || null;
+  const referenceImageCaption = simulation.reference_image_caption || 'Relatable concept reference image';
   const plotlyFigure = useMemo(() => {
     const figure = simulation.plotly_figure;
     if (!figure || typeof figure !== 'object') return null;
@@ -103,8 +106,30 @@ export default function SimulationView({ simulation }) {
 
       {videoUrl && (
         <div className="mt-4 rounded-xl border border-cyan-400/30 bg-[#0a1220] p-3">
-          <p className="mb-2 text-xs uppercase tracking-wider text-cyan-300">Auto-rendered Manim Video</p>
-          <video className="w-full rounded-lg border border-white/10" src={videoUrl} controls preload="metadata" />
+          <p className="mb-2 text-xs uppercase tracking-wider text-cyan-300">{isImageMedia ? 'Auto-rendered Manim Snapshot' : 'Auto-rendered Manim Video'}</p>
+          {isImageMedia ? (
+            <img
+              className="w-full rounded-lg border border-white/10 object-cover"
+              src={videoUrl}
+              alt={simulation.title || 'Simulation snapshot'}
+              loading="lazy"
+            />
+          ) : (
+            <video className="w-full rounded-lg border border-white/10" src={videoUrl} controls preload="metadata" />
+          )}
+        </div>
+      )}
+
+      {referenceImageUrl && (
+        <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.02] p-3">
+          <p className="mb-2 text-xs uppercase tracking-wider text-cyan-300">Relatable Reference</p>
+          <img
+            className="w-full rounded-lg border border-white/10 object-cover"
+            src={referenceImageUrl}
+            alt={referenceImageCaption}
+            loading="lazy"
+          />
+          <p className="mt-2 text-xs text-neutral-300">{referenceImageCaption}</p>
         </div>
       )}
 
