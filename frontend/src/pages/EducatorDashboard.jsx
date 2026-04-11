@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Users, AlertTriangle, CheckCircle2, BarChart3, LogOut, Search, Check, X, BrainCircuit, Sparkles, PlusSquare } from 'lucide-react';
 import axios from 'axios';
 import EducatorQuestionForm from '../components/EducatorQuestionForm';
+import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
 
 export default function EducatorDashboard() {
   const user = useStore((state) => state.user);
@@ -72,9 +73,18 @@ export default function EducatorDashboard() {
     fetchStudentData();
   }, [user, navigate]);
 
-  const handleLogout = () => {
-    logout();
-    navigate('/');
+  const handleLogout = async () => {
+    try {
+      if (isSupabaseConfigured && supabase) {
+        await supabase.auth.signOut();
+      }
+    } catch (err) {
+      console.error('Supabase sign out failed', err);
+    } finally {
+      localStorage.removeItem('pending_auth_role');
+      logout();
+      navigate('/');
+    }
   };
 
   const handleReviewDecision = async (reviewId, type, decision) => {
