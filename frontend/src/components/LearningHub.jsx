@@ -4,19 +4,41 @@ import ReactMarkdown from 'react-markdown';
 import { useStore } from '../store/useStore';
 import { 
   CheckCircle2, FileText, BrainCircuit, Target, 
-  Plus, ThumbsUp, ThumbsDown, Sparkles 
+  Plus, ThumbsUp, ThumbsDown, Activity, 
+  Search, AlertTriangle, HelpCircle, Compass, Sparkles, Filter 
 } from 'lucide-react';
 
 const API = () => import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
+// ── Helper function for styling feedback sections ──
+const getSectionStyle = (title) => {
+  const t = title.toLowerCase();
+  if (t.includes('reflect') || t.includes('progress') || t.includes('overview')) 
+    return { icon: Activity, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' };
+  if (t.includes('challenge') || t.includes('problem') || t.includes('current')) 
+    return { icon: Target, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20' };
+  if (t.includes('approach') || t.includes('analy') || t.includes('answer')) 
+    return { icon: Search, color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20' };
+  if (t.includes('misconception') || t.includes('error') || t.includes('address')) 
+    return { icon: AlertTriangle, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20' };
+  if (t.includes('question') || t.includes('guid') || t.includes('step')) 
+    return { icon: HelpCircle, color: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/20' };
+  if (t.includes('forward') || t.includes('success') || t.includes('path') || t.includes('conclusion')) 
+    return { icon: Compass, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' };
+  
+  return { icon: Sparkles, color: 'text-slate-300', bg: 'bg-neutral-800', border: 'border-white/10' };
+};
+
 export default function LearningHub() {
   const questions         = useStore((state) => state.questions);
-  const currentQuestionIndex = useStore((state) => state.currentQuestionIndex);
   const fetchQuestions    = useStore((state) => state.fetchQuestions);
-  const nextQuestion      = useStore((state) => state.nextQuestion);
   const setContext        = useStore((state) => state.setContext);
   const startTracking     = useStore((state) => state.startTracking);
   const studentId         = useStore((state) => state.studentId);
+
+  // ── Local Filtering & Pagination State ──
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [localIndex, setLocalIndex] = useState(0);
 
   // ── Detect-concepts state ──
   const [concepts, setConcepts]           = useState([]);
@@ -38,42 +60,87 @@ export default function LearningHub() {
 
   const feedbackRef = useRef(null);
 
-  // Smarter, cleaner parsing: Groups text by the AI's natural headers into simple blocks
-  const parsedFeedbackBlocks = useMemo(() => {
-    if (!tutorFeedback) return [];
-    
-    const lines = tutorFeedback.split('\n').map(l => l.trim()).filter(Boolean);
-    const result = [];
-    let currentBlock = { header: 'Overview', lines: [] };
-    
-    lines.forEach(line => {
-      // It's a header if it's short, doesn't end in punctuation, and isn't a bullet
-      const isHeader = 
-        line.startsWith('#') || 
-        (line.startsWith('**') && line.endsWith('**') && line.length < 60) ||
-        (line.length < 60 && !line.match(/[.!?:]$/) && !line.match(/^[-*0-9]/));
-        
-      if (isHeader) {
-        if (currentBlock.lines.length > 0) {
-          result.push(currentBlock);
-        }
-        currentBlock = { header: line.replace(/^[#*]+ */, '').replace(/\*+$/, ''), lines: [] };
-      } else {
-        currentBlock.lines.push(line);
-      }
-    });
-    
-    if (currentBlock.lines.length > 0) {
-      result.push(currentBlock);
-    }
-    
-    return result;
-  }, [tutorFeedback]);
-
   // ── Fetch questions on mount ──
   useEffect(() => { fetchQuestions(); }, [fetchQuestions]);
 
-  const currentLevel = questions[currentQuestionIndex];
+  // ── Compute Filtered Questions ──
+  const categories = useMemo(() => {
+    const cats = questions.map(q => q.category).filter(Boolean);
+    return ['All', ...new Set(cats)];
+  }, [questions]);
+
+  const filteredQuestions = useMemo(() => {
+    if (selectedCategory === 'All') return questions;
+    return questions.filter(q => q.category === selectedCategory);
+  }, [questions, selectedCategory]);
+
+  const currentLevel = filteredQuestions[localIndex];
+
+  const handleCategoryChange = (e) => {
+    setSelectedCategory(e.target.value);
+    setLocalIndex(0); // Reset progress when subject changes
+  };
+
+  const handleNextPrompt = () => {
+    if (localIndex < filteredQuestions.length - 1) {
+      setLocalIndex(prev => prev + 1);
+    }
+  };
+
+  // ── Parse tutorFeedback into structured sections ──
+  const parsedFeedbackSections = useMemo(() => {
+    if (!tutorFeedback) return [];
+    
+    let cleanFeedback = tutorFeedback
+      .replace(/(Final Answer:?|Explanation:?|Conclusion:?|Let's break down|Step \d+:?)/gi, '\n\n$1\n\n')
+      .replace(/(\*\*[A-Za-z0-9 ]+\*\*)/g, '\n$1\n');
+
+    cleanFeedback = cleanFeedback.replace(/\n{3,}/g, '\n\n');
+
+    const lines = cleanFeedback.split('\n');
+    const parsedSections = [];
+    let currentSection = { title: 'Analysis Overview', content: [] };
+
+    lines.forEach(line => {
+      const cleanLine = line.trim();
+      if (!cleanLine) return; 
+
+      const isHeader = cleanLine.startsWith('#') || 
+                      (cleanLine.startsWith('**') && cleanLine.endsWith('**')) ||
+                      (cleanLine.length < 60 && !cleanLine.match(/[.!?]$/) && !cleanLine.startsWith('-')) ||
+                      (cleanLine.match(/^(Step \d+|Final Answer|Conclusion|Explanation|Hint|Note):?$/i));
+
+      if (isHeader) {
+        if (currentSection.content.length > 0) {
+          parsedSections.push({ ...currentSection, content: currentSection.content.join('\n\n') });
+        }
+        currentSection = { 
+          title: cleanLine.replace(/^[#*]+ */, '').replace(/\*+$/, '').replace(/:$/, ''), 
+          content: [] 
+        };
+      } else {
+        if (cleanLine.length > 300) {
+          const sentences = cleanLine.split(/(?<=[.!?])\s+/);
+          let paragraph = [];
+          sentences.forEach((sentence, i) => {
+            paragraph.push(sentence);
+            if ((i + 1) % 2 === 0 || i === sentences.length - 1) {
+              currentSection.content.push(paragraph.join(' '));
+              paragraph = [];
+            }
+          });
+        } else {
+          currentSection.content.push(cleanLine);
+        }
+      }
+    });
+
+    if (currentSection.content.length > 0) {
+      parsedSections.push({ ...currentSection, content: currentSection.content.join('\n\n') });
+    }
+
+    return parsedSections;
+  }, [tutorFeedback]);
 
   // ── Update store context + pre-detect correct answer ──
   useEffect(() => {
@@ -112,10 +179,6 @@ export default function LearningHub() {
       feedbackRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }, [tutorFeedback]);
-
-  const handleNextPrompt = () => {
-    nextQuestion();
-  };
 
   const handleDetectConcepts = async () => {
     setDetecting(true);
@@ -206,288 +269,334 @@ export default function LearningHub() {
     }
   };
 
-  if (!currentLevel) {
+  if (questions.length === 0) {
     return (
       <div className="flex-1 p-10 flex items-center justify-center text-neutral-500 bg-[#0a0a0a]">
-        Loading modules...
+        Loading curriculum...
       </div>
     );
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 md:p-10 relative bg-[#0a0a0a] text-neutral-200 font-sans">
+    <div className="flex-1 overflow-y-auto p-6 md:p-10 relative bg-[#0a0a0a] text-neutral-200 font-sans selection:bg-blue-500/30">
       <div className="max-w-4xl mx-auto space-y-8 pb-16">
 
-        {/* Header */}
-        <div className="flex items-end justify-between mb-8">
+        {/* ── Header & Filters ── */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
           <div>
             <div className="flex items-center gap-2 mb-2 text-blue-400">
               <Sparkles className="w-4 h-4" />
-              <span className="text-xs font-bold uppercase tracking-widest">{currentLevel.category} Module</span>
+              <span className="text-xs font-bold uppercase tracking-widest">{currentLevel?.category || 'Learning'} Module</span>
             </div>
             <h1 className="text-3xl md:text-4xl font-extrabold text-white tracking-tight">
-              Evaluation #{currentQuestionIndex + 1}
+              Evaluation #{localIndex + 1}
             </h1>
           </div>
-          <div className="hidden md:flex items-center gap-2 bg-[#111113] px-4 py-2 rounded-full border border-white/5">
-            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-            <span className="text-sm font-medium text-neutral-400">
-              Phase {currentQuestionIndex + 1}/{questions.length}
-            </span>
+          
+          <div className="flex items-center gap-3">
+            {/* Subject Dropdown */}
+            <div className="relative">
+              <select 
+                value={selectedCategory}
+                onChange={handleCategoryChange}
+                className="appearance-none bg-[#111113] border border-white/5 hover:border-white/10 text-white text-sm font-medium py-2 pl-4 pr-10 rounded-xl focus:outline-none focus:border-blue-500/50 transition-colors cursor-pointer shadow-sm"
+              >
+                {categories.map(cat => (
+                  <option key={cat} value={cat} className="bg-neutral-900">
+                    {cat === 'All' ? 'All Subjects' : cat}
+                  </option>
+                ))}
+              </select>
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                <Filter className="w-3.5 h-3.5 text-neutral-500" />
+              </div>
+            </div>
+
+            {/* Phase Indicator */}
+            <div className="hidden md:flex items-center gap-2 bg-[#111113] px-4 py-2 rounded-xl border border-white/5 shadow-sm">
+              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+              <span className="text-sm font-medium text-neutral-400">
+                Phase {filteredQuestions.length > 0 ? localIndex + 1 : 0}/{filteredQuestions.length}
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* Main card */}
-        <div className="bg-[#111113] rounded-3xl p-6 md:p-8 border border-white/5 shadow-sm relative overflow-hidden">
-          
-          {/* Card header */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-500/10 rounded-xl border border-blue-500/20 flex items-center justify-center">
-                <FileText className="w-5 h-5 text-blue-400" />
-              </div>
-              <h3 className="text-xl font-bold text-white tracking-tight">Current Challenge</h3>
-            </div>
-            
-            <div className="flex items-center gap-3">
-              {concepts.length === 0 && (
-                <button
-                  onClick={handleDetectConcepts}
-                  disabled={detecting}
-                  className="px-4 py-2 bg-neutral-900 hover:bg-neutral-800 text-neutral-300 text-sm font-medium rounded-xl border border-white/5 transition-colors flex items-center gap-2"
-                >
-                  <Target className="w-4 h-4" />
-                  {detecting ? 'Detecting…' : 'Detect Concepts'}
-                </button>
-              )}
-              <button
-                onClick={handleNextPrompt}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-xl transition-colors shadow-lg shadow-blue-500/20"
-              >
-                Next Prompt →
-              </button>
-            </div>
+        {/* ── Empty State Guard ── */}
+        {filteredQuestions.length === 0 ? (
+          <div className="bg-[#111113] rounded-3xl p-12 border border-white/5 flex flex-col items-center justify-center text-center">
+            <Search className="w-10 h-10 text-neutral-600 mb-4" />
+            <h3 className="text-lg font-semibold text-white mb-2">No questions found</h3>
+            <p className="text-neutral-500 text-sm">We couldn't find any modules under the {selectedCategory} subject.</p>
           </div>
-
-          {/* ── Detected concepts ── */}
-          {concepts.length > 0 && (
-            <div className="mb-8 p-5 bg-white/[0.02] rounded-2xl border border-white/5">
-              <p className="text-xs text-neutral-500 uppercase tracking-wider font-bold mb-4">
-                Core Concepts (Flag weaknesses)
-              </p>
-              <div className="flex flex-wrap gap-2.5">
-                {concepts.map((concept, idx) => {
-                  const marked = markedConcepts.includes(concept);
-                  return (
-                    <div
-                      key={idx}
-                      className={`flex items-center gap-2 pl-3 pr-1.5 py-1.5 rounded-lg text-sm font-medium border transition-all ${
-                        marked
-                          ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                          : 'bg-neutral-900 border-white/5 text-neutral-300'
-                      }`}
+        ) : (
+          <>
+            {/* Main card */}
+            <div className="bg-[#111113] rounded-3xl p-6 md:p-8 border border-white/5 shadow-sm relative overflow-hidden">
+              
+              {/* Card header */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-blue-500/10 rounded-xl border border-blue-500/20 flex items-center justify-center">
+                    <FileText className="w-5 h-5 text-blue-400" />
+                  </div>
+                  <h3 className="text-xl font-bold text-white tracking-tight">Current Challenge</h3>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                  {concepts.length === 0 && (
+                    <button
+                      onClick={handleDetectConcepts}
+                      disabled={detecting}
+                      className="px-4 py-2.5 bg-neutral-900 hover:bg-neutral-800 text-neutral-300 text-sm font-medium rounded-xl border border-white/5 transition-colors flex items-center gap-2"
                     >
-                      <span>{concept}</span>
-                      {marked ? (
-                        <span className="px-2 py-0.5 text-[10px] uppercase tracking-wider rounded bg-amber-500/20 text-amber-300 font-bold">
-                          Weak ✓
-                        </span>
-                      ) : (
-                        <button
-                          onClick={() => handleAddWeakConcept(concept)}
-                          className="p-1 rounded bg-neutral-800 hover:bg-amber-500/20 hover:text-amber-400 transition-colors"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Question body */}
-          <div className="bg-[#0a0a0a] rounded-2xl p-6 md:p-8 border border-white/5 mb-8">
-            <p className="text-lg md:text-xl text-neutral-200 leading-relaxed font-medium">
-              {currentLevel.content}
-            </p>
-          </div>
-
-          {/* ── Initial answer selection ── */}
-          {!needsVerification && !tutorFeedback && (
-            <div className="space-y-6">
-              <h4 className="text-base font-semibold text-neutral-400 uppercase tracking-wider">Select your answer</h4>
-              <div className="space-y-3">
-                {currentLevel.options?.map((opt, i) => (
-                  <label
-                    key={i}
-                    className={`flex items-start gap-4 p-4 rounded-xl border transition-all cursor-pointer ${
-                      selectedOptIndex === i
-                        ? 'bg-blue-500/10 border-blue-500/50 text-blue-100'
-                        : 'bg-[#111113] hover:bg-white/[0.02] border-white/5 hover:border-white/10 text-neutral-300'
-                    }`}
+                      <Target className="w-4 h-4" />
+                      {detecting ? 'Detecting…' : 'Detect Concepts'}
+                    </button>
+                  )}
+                  <button
+                    onClick={handleNextPrompt}
+                    disabled={localIndex >= filteredQuestions.length - 1}
+                    className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-800 disabled:text-neutral-500 disabled:shadow-none text-white text-sm font-semibold rounded-xl transition-colors shadow-lg shadow-blue-500/20"
                   >
-                    <input
-                      type="radio"
-                      onChange={() => setSelectedOptIndex(i)}
-                      checked={selectedOptIndex === i}
-                      name="quiz"
-                      className="mt-1 flex-shrink-0"
-                    />
-                    <span className="text-base leading-snug">{opt}</span>
-                  </label>
-                ))}
-              </div>
-              
-              <div className="pt-4">
-                <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  Optional: Explain your reasoning
-                </label>
-                <textarea
-                  value={studentExplanation}
-                  onChange={(event) => setStudentExplanation(event.target.value)}
-                  rows={3}
-                  placeholder="Describe how you solved this question..."
-                  className="w-full rounded-xl border border-white/5 bg-neutral-900 p-4 text-sm text-neutral-200 placeholder-neutral-600 outline-none focus:border-blue-500/50 transition-colors"
-                />
+                    Next Prompt →
+                  </button>
+                </div>
               </div>
 
-              <button
-                onClick={() => handleSubmit(false)}
-                disabled={selectedOptIndex === null || isSubmitting || correctIndex === null}
-                className="w-full py-4 bg-white hover:bg-neutral-200 text-black font-bold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all text-base"
-              >
-                {isSubmitting ? 'Analysing Response...' : correctIndex === null ? 'Loading Verification...' : 'Submit Answer'}
-              </button>
-            </div>
-          )}
-
-          {/* ── Follow-up verification ── */}
-          {needsVerification && (
-            <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-2xl p-6 md:p-8 animate-in fade-in slide-in-from-top-4">
-              <div className="flex items-center gap-3 mb-4 text-emerald-400">
-                <CheckCircle2 className="w-6 h-6" />
-                <h4 className="text-xl font-bold">You got that right!</h4>
-              </div>
-              <p className="text-emerald-200/70 mb-8 leading-relaxed">
-                To ensure complete conceptual understanding, please answer these quick verification questions.
-              </p>
-              
-              {followUpQuestions.map((q, qi) => (
-                <div key={qi} className="mb-8 last:mb-6">
-                  <p className="text-base font-medium text-white mb-4">
-                    {qi + 1}. {q.question}
+              {/* ── Detected concepts ── */}
+              {concepts.length > 0 && (
+                <div className="mb-8 p-5 bg-white/[0.02] rounded-2xl border border-white/5">
+                  <p className="text-xs text-neutral-500 uppercase tracking-wider font-bold mb-4">
+                    Core Concepts (Flag weaknesses)
                   </p>
-                  <div className="space-y-2">
-                    {q.options?.map((opt, oi) => (
+                  <div className="flex flex-wrap gap-2.5">
+                    {concepts.map((concept, idx) => {
+                      const marked = markedConcepts.includes(concept);
+                      return (
+                        <div
+                          key={idx}
+                          className={`flex items-center gap-2 pl-3 pr-1.5 py-1.5 rounded-lg text-sm font-medium border transition-all ${
+                            marked
+                              ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                              : 'bg-neutral-900 border-white/5 text-neutral-300'
+                          }`}
+                        >
+                          <span>{concept}</span>
+                          {marked ? (
+                            <span className="px-2 py-0.5 text-[10px] uppercase tracking-wider rounded bg-amber-500/20 text-amber-300 font-bold">
+                              Weak ✓
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => handleAddWeakConcept(concept)}
+                              className="p-1 rounded bg-neutral-800 hover:bg-amber-500/20 hover:text-amber-400 transition-colors"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Question body */}
+              <div className="bg-[#0a0a0a] rounded-2xl p-6 md:p-8 border border-white/5 mb-8">
+                <p className="text-lg md:text-xl text-neutral-200 leading-relaxed font-medium">
+                  {currentLevel.content}
+                </p>
+              </div>
+
+              {/* ── Initial answer selection ── */}
+              {!needsVerification && !tutorFeedback && (
+                <div className="space-y-6">
+                  <h4 className="text-base font-semibold text-neutral-400 uppercase tracking-wider">Select your answer</h4>
+                  <div className="space-y-3">
+                    {currentLevel.options?.map((opt, i) => (
                       <label
-                        key={oi}
-                        className="flex items-start gap-3 p-3.5 bg-neutral-900/50 border border-white/5 rounded-xl hover:border-emerald-500/30 cursor-pointer transition-colors"
+                        key={i}
+                        className={`flex items-start gap-4 p-4 rounded-xl border transition-all cursor-pointer ${
+                          selectedOptIndex === i
+                            ? 'bg-blue-500/10 border-blue-500/50 text-blue-100'
+                            : 'bg-[#111113] hover:bg-white/[0.02] border-white/5 hover:border-white/10 text-neutral-300'
+                        }`}
                       >
                         <input
                           type="radio"
-                          name={`fu-q-${qi}`}
-                          className="mt-0.5 accent-emerald-500"
-                          onChange={() =>
-                            setFollowUpAnswers(prev => ({ ...prev, [`q${qi}`]: opt }))
-                          }
+                          onChange={() => setSelectedOptIndex(i)}
+                          checked={selectedOptIndex === i}
+                          name="quiz"
+                          className="mt-1 flex-shrink-0"
                         />
-                        <span className="text-sm text-neutral-300 leading-snug">{opt}</span>
+                        <span className="text-base leading-snug">{opt}</span>
                       </label>
                     ))}
                   </div>
+                  
+                  <div className="pt-4">
+                    <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                      Optional: Explain your reasoning
+                    </label>
+                    <textarea
+                      value={studentExplanation}
+                      onChange={(event) => setStudentExplanation(event.target.value)}
+                      rows={3}
+                      placeholder="Describe how you solved this question..."
+                      className="w-full rounded-xl border border-white/5 bg-neutral-900 p-4 text-sm text-neutral-200 placeholder-neutral-600 outline-none focus:border-blue-500/50 transition-colors"
+                    />
+                  </div>
+
+                  <button
+                    onClick={() => handleSubmit(false)}
+                    disabled={selectedOptIndex === null || isSubmitting || correctIndex === null}
+                    className="w-full py-4 bg-white hover:bg-neutral-200 text-black font-bold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all text-base"
+                  >
+                    {isSubmitting ? 'Analysing Response...' : correctIndex === null ? 'Preparing...' : 'Submit Answer'}
+                  </button>
                 </div>
-              ))}
+              )}
 
-              <div className="mb-6 pt-4 border-t border-emerald-500/20">
-                <label className="mb-3 block text-xs font-semibold uppercase tracking-wide text-emerald-500">
-                  Optional: Final Logic Check
-                </label>
-                <textarea
-                  value={studentExplanation}
-                  onChange={(event) => setStudentExplanation(event.target.value)}
-                  rows={3}
-                  placeholder="Explain why your final reasoning is correct..."
-                  className="w-full rounded-xl border border-emerald-500/20 bg-neutral-900/50 p-4 text-sm text-neutral-200 placeholder-neutral-600 outline-none focus:border-emerald-500/50 transition-colors"
-                />
-              </div>
+              {/* ── Follow-up verification ── */}
+              {needsVerification && (
+                <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-2xl p-6 md:p-8 animate-in fade-in slide-in-from-top-4">
+                  <div className="flex items-center gap-3 mb-4 text-emerald-400">
+                    <CheckCircle2 className="w-6 h-6" />
+                    <h4 className="text-xl font-bold">You got that right!</h4>
+                  </div>
+                  <p className="text-emerald-200/70 mb-8 leading-relaxed">
+                    To ensure complete conceptual understanding, please answer these quick verification questions.
+                  </p>
+                  
+                  {followUpQuestions.map((q, qi) => (
+                    <div key={qi} className="mb-8 last:mb-6">
+                      <p className="text-base font-medium text-white mb-4">
+                        {qi + 1}. {q.question}
+                      </p>
+                      <div className="space-y-2">
+                        {q.options?.map((opt, oi) => (
+                          <label
+                            key={oi}
+                            className="flex items-start gap-3 p-3.5 bg-neutral-900/50 border border-white/5 rounded-xl hover:border-emerald-500/30 cursor-pointer transition-colors"
+                          >
+                            <input
+                              type="radio"
+                              name={`fu-q-${qi}`}
+                              className="mt-0.5 accent-emerald-500"
+                              onChange={() =>
+                                setFollowUpAnswers(prev => ({ ...prev, [`q${qi}`]: opt }))
+                              }
+                            />
+                            <span className="text-sm text-neutral-300 leading-snug">{opt}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
 
-              <button
-                onClick={() => handleSubmit(true)}
-                disabled={Object.keys(followUpAnswers).length < followUpQuestions.length || isSubmitting}
-                className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-base shadow-lg shadow-emerald-500/20"
+                  <div className="mb-6 pt-4 border-t border-emerald-500/20">
+                    <label className="mb-3 block text-xs font-semibold uppercase tracking-wide text-emerald-500">
+                      Optional: Final Logic Check
+                    </label>
+                    <textarea
+                      value={studentExplanation}
+                      onChange={(event) => setStudentExplanation(event.target.value)}
+                      rows={3}
+                      placeholder="Explain why your final reasoning is correct..."
+                      className="w-full rounded-xl border border-emerald-500/20 bg-neutral-900/50 p-4 text-sm text-neutral-200 placeholder-neutral-600 outline-none focus:border-emerald-500/50 transition-colors"
+                    />
+                  </div>
+
+                  <button
+                    onClick={() => handleSubmit(true)}
+                    disabled={Object.keys(followUpAnswers).length < followUpQuestions.length || isSubmitting}
+                    className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-base shadow-lg shadow-emerald-500/20"
+                  >
+                    {isSubmitting ? 'Evaluating...' : 'Confirm Verification'}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* ── Socratic AI Review with Structured Boxes ── */}
+            {tutorFeedback && (
+              <div
+                ref={feedbackRef}
+                className="mt-8 bg-[#111113] rounded-3xl border border-white/5 shadow-xl overflow-hidden animate-in fade-in slide-in-from-bottom-4"
               >
-                {isSubmitting ? 'Evaluating...' : 'Confirm Verification'}
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* ── CLEAN PARAGRAPH BLOCKS ── */}
-        {tutorFeedback && (
-          <div
-            ref={feedbackRef}
-            className="mt-8 bg-[#111113] rounded-3xl border border-white/5 shadow-xl overflow-hidden animate-in fade-in slide-in-from-bottom-4"
-          >
-            {/* Review header */}
-            <div className="flex items-center gap-4 px-6 md:px-8 py-5 border-b border-white/5 bg-white/[0.02]">
-              <div className="w-10 h-10 bg-blue-500/10 rounded-xl border border-blue-500/20 flex items-center justify-center">
-                <BrainCircuit className="w-5 h-5 text-blue-400" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-white tracking-tight">Socratic AI Review</h3>
-                <p className="text-xs text-neutral-500 font-medium uppercase tracking-widest mt-1">Diagnostic Analysis</p>
-              </div>
-            </div>
-
-            <div className="px-6 md:px-8 py-8 flex flex-col gap-4">
-              {parsedFeedbackBlocks.map((block, idx) => (
-                <div key={idx} className="rounded-2xl border border-white/5 bg-white/[0.02] p-5 shadow-sm">
-                  {block.header && block.header !== 'Overview' && (
-                    <h4 className="text-xs font-bold uppercase tracking-widest text-blue-400 mb-4">
-                      {block.header}
-                    </h4>
-                  )}
-                  <div className="text-[15px] text-neutral-300 leading-relaxed prose prose-invert max-w-none prose-p:mb-3 prose-p:last:mb-0 prose-ul:my-3 prose-li:my-1">
-                    <ReactMarkdown>{block.lines.join('\n\n')}</ReactMarkdown>
+                {/* Review header */}
+                <div className="flex items-center gap-4 px-6 md:px-8 py-5 border-b border-white/5 bg-white/[0.02]">
+                  <div className="w-10 h-10 bg-blue-500/10 rounded-xl border border-blue-500/20 flex items-center justify-center">
+                    <BrainCircuit className="w-5 h-5 text-blue-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-white tracking-tight">Socratic AI Review</h3>
+                    <p className="text-xs text-neutral-500 font-medium uppercase tracking-widest mt-1">Diagnostic Analysis</p>
                   </div>
                 </div>
-              ))}
-            </div>
 
-            {/* ── RL Feedback section ── */}
-            {predictedTopic && !rlSubmitted && (
-              <div className="mx-6 md:mx-8 mb-8 p-6 bg-neutral-900/50 border border-white/5 rounded-2xl">
-                <p className="text-[15px] text-neutral-300 mb-5 leading-relaxed">
-                  <span className="font-semibold text-white">AI Diagnostics Flag:</span>{' '}
-                  <span className="text-amber-400 font-medium">"{predictedTopic}"</span>
-                  <br />
-                  <span className="text-neutral-500 text-sm mt-1 block">Does this match where you felt stuck?</span>
-                </p>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <button
-                    onClick={() => handleRLFeedback(true)}
-                    className="flex items-center justify-center flex-1 gap-2 py-3 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-white/5 rounded-xl text-sm font-semibold transition-colors"
-                  >
-                    <ThumbsUp className="w-4 h-4" /> Yes, accurate
-                  </button>
-                  <button
-                    onClick={() => handleRLFeedback(false)}
-                    className="flex items-center justify-center flex-1 gap-2 py-3 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-white/5 rounded-xl text-sm font-semibold transition-colors"
-                  >
-                    <ThumbsDown className="w-4 h-4" /> No, inaccurate
-                  </button>
+                {/* STRUCTURED FEEDBACK BOXES */}
+                <div className="px-6 md:px-8 py-8 flex flex-col gap-5">
+                  {parsedFeedbackSections.map((section, idx) => {
+                    const Style = getSectionStyle(section.title);
+                    const Icon = Style.icon;
+
+                    return (
+                      <div key={idx} className={`rounded-2xl border ${Style.border} ${Style.bg} overflow-hidden shadow-sm`}>
+                        <div className={`flex items-center gap-3 px-5 py-3.5 bg-black/20 border-b ${Style.border}`}>
+                          <Icon className={`h-5 w-5 ${Style.color}`} />
+                          <h4 className={`text-sm font-bold uppercase tracking-wider ${Style.color}`}>
+                            {section.title}
+                          </h4>
+                        </div>
+                        <div className="px-5 py-4 text-base text-neutral-300 leading-relaxed prose prose-invert max-w-none
+                          prose-p:mb-2 prose-p:last:mb-0
+                          prose-strong:text-white
+                          prose-ul:my-2 prose-li:my-1
+                          prose-code:text-cyan-300 prose-code:bg-slate-900/80 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded
+                        ">
+                          <ReactMarkdown>{section.content}</ReactMarkdown>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              </div>
-            )}
 
-            {rlSubmitted && (
-              <div className="mx-6 md:mx-8 mb-8 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-center text-sm font-medium text-emerald-400">
-                Response recorded. The engine will adapt future queries.
+                {/* ── RL Feedback section ── */}
+                {predictedTopic && !rlSubmitted && (
+                  <div className="mx-6 md:mx-8 mb-8 p-6 bg-neutral-900/50 border border-white/5 rounded-2xl">
+                    <p className="text-[15px] text-neutral-300 mb-5 leading-relaxed">
+                      <span className="font-semibold text-white">AI Diagnostics Flag:</span>{' '}
+                      <span className="text-amber-400 font-medium">"{predictedTopic}"</span>
+                      <br />
+                      <span className="text-neutral-500 text-sm mt-1.5 block">Does this match where you felt stuck?</span>
+                    </p>
+                    <div className="flex flex-col sm:flex-row gap-4">
+                      <button
+                        onClick={() => handleRLFeedback(true)}
+                        className="flex items-center justify-center flex-1 gap-2 py-3 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-xl text-sm font-semibold transition"
+                      >
+                        <ThumbsUp className="w-5 h-5" /> Yes, that's right
+                      </button>
+                      <button
+                        onClick={() => handleRLFeedback(false)}
+                        className="flex items-center justify-center flex-1 gap-2 py-3 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 rounded-xl text-sm font-semibold transition"
+                      >
+                        <ThumbsDown className="w-5 h-5" /> No, it's off
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {rlSubmitted && (
+                  <div className="mx-6 md:mx-8 mb-8 p-5 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-center text-sm font-medium text-emerald-400">
+                    Response recorded. The engine will adapt future queries.
+                  </div>
+                )}
               </div>
             )}
-          </div>
+          </>
         )}
       </div>
     </div>
