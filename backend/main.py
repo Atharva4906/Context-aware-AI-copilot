@@ -32,6 +32,8 @@ from database.supabase_client import (
     get_student_history,
     log_interaction,
     insert_question,
+    insert_question_answer_key,
+    get_question_answer_keys,
     get_active_misconceptions,
     insert_common_misconception,
     insert_misconception_review,
@@ -78,6 +80,54 @@ supabase = get_supabase_client()
 
 ALLOWED_CATEGORIES = {"Math", "Physics", "English", "Coding"}
 SIMILARITY_THRESHOLD = 0.78
+
+
+def _normalize_question_payload(request: CreateQuestionRequest, require_answer: bool = False) -> dict:
+    category = request.category.strip()
+    if category not in ALLOWED_CATEGORIES:
+        raise HTTPException(status_code=400, detail="Invalid category.")
+
+    content = request.content.strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="Question content is required.")
+
+    options = request.options
+    if options is not None:
+        options = [opt.strip() for opt in options if isinstance(opt, str) and opt.strip()]
+        options = options or None
+
+    correct_answer = request.correct_answer.strip() if isinstance(request.correct_answer, str) else None
+    correct_answer = correct_answer or None
+    correct_answer_index = request.correct_answer_index
+
+    if correct_answer_index is not None:
+        if options is None:
+            raise HTTPException(status_code=400, detail="correct_answer_index requires non-empty options.")
+        if correct_answer_index < 0 or correct_answer_index >= len(options):
+            raise HTTPException(status_code=400, detail="correct_answer_index is out of range for provided options.")
+
+    if correct_answer is not None and correct_answer_index is not None:
+        if options[correct_answer_index] != correct_answer:
+            raise HTTPException(status_code=400, detail="correct_answer does not match options[correct_answer_index].")
+    elif correct_answer_index is not None:
+        correct_answer = options[correct_answer_index]
+    elif correct_answer is not None:
+        if options is None:
+            raise HTTPException(status_code=400, detail="correct_answer requires non-empty options.")
+        if correct_answer not in options:
+            raise HTTPException(status_code=400, detail="correct_answer must match one of the provided options.")
+        correct_answer_index = options.index(correct_answer)
+
+    if require_answer and (correct_answer is None or correct_answer_index is None):
+        raise HTTPException(status_code=400, detail="Both correct_answer and correct_answer_index are required for admin question creation.")
+
+    return {
+        "category": category,
+        "content": content,
+        "options": options,
+        "correct_answer": correct_answer,
+        "correct_answer_index": correct_answer_index,
+    }
 
 @app.post("/api/analyze-response", response_model=AnalyzeResponse)
 async def analyze_response(request: AnalyzeRequest):
@@ -327,13 +377,24 @@ async def submit_rl_feedback(request: RLFeedbackRequest):
 
 @app.get("/api/questions", response_model=list[QuestionModel])
 async def get_questions(category: Optional[str] = Query(None)):
-    """Fetch questions, optionally filtered by category."""
+    """Fetch questions, optionally filtered by category, enriched with answer-key data."""
     try:
         query = supabase.table('questions').select('*')
         if category:
             query = query.eq('category', category)
         res = query.execute()
-        return res.data if res.data else []
+        rows = res.data if res.data else []
+        if not rows:
+            return []
+
+        question_ids = [row.get('id') for row in rows if row.get('id')]
+        answer_key_map = get_question_answer_keys(question_ids)
+        for row in rows:
+            key = answer_key_map.get(row.get('id'))
+            row['correct_answer'] = key.get('correct_answer') if key else None
+            row['correct_answer_index'] = key.get('correct_answer_index') if key else None
+
+        return rows
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -367,6 +428,8 @@ async def parse_question(request: ParseQuestionRequest):
         else:
             parsed["correct_answer"] = None
 
+        parsed["correct_answer_index"] = None
+
         return ParseQuestionResponse(parsed=ParsedQuestion(**parsed))
     except HTTPException:
         raise
@@ -376,29 +439,62 @@ async def parse_question(request: ParseQuestionRequest):
 @app.post("/api/questions", response_model=CreateQuestionResponse)
 async def create_question(request: CreateQuestionRequest):
     try:
-        category = request.category.strip()
-        if category not in ALLOWED_CATEGORIES:
-            raise HTTPException(status_code=400, detail="Invalid category.")
-
-        content = request.content.strip()
-        if not content:
-            raise HTTPException(status_code=400, detail="Question content is required.")
-
-        options = request.options
-        if options is not None:
-            options = [opt.strip() for opt in options if isinstance(opt, str) and opt.strip()]
-            options = options or None
-
-        row = insert_question(category=category, content=content, options=options)
+        normalized = _normalize_question_payload(request, require_answer=False)
+        row = insert_question(
+            category=normalized["category"],
+            content=normalized["content"],
+            options=normalized["options"]
+        )
         if not row:
             raise HTTPException(status_code=500, detail="Failed to save question.")
 
         return CreateQuestionResponse(
             id=row.get("id"),
-            category=row.get("category", category),
-            content=row.get("content", content),
-            options=row.get("options", options),
-            correct_answer=request.correct_answer
+            category=row.get("category", normalized["category"]),
+            content=row.get("content", normalized["content"]),
+            options=row.get("options", normalized["options"]),
+            correct_answer=normalized["correct_answer"],
+            correct_answer_index=normalized["correct_answer_index"],
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/admin/questions", response_model=CreateQuestionResponse)
+async def create_admin_question(request: CreateQuestionRequest):
+    try:
+        normalized = _normalize_question_payload(request, require_answer=True)
+        row = insert_question(
+            category=normalized["category"],
+            content=normalized["content"],
+            options=normalized["options"]
+        )
+        if not row:
+            raise HTTPException(status_code=500, detail="Failed to save question.")
+
+        question_id = row.get("id")
+        answer_row = insert_question_answer_key(
+            question_id=question_id,
+            correct_answer=normalized["correct_answer"],
+            correct_answer_index=normalized["correct_answer_index"],
+        )
+        if not answer_row:
+            # Best-effort rollback so admin endpoint behaves atomically.
+            try:
+                supabase.table('questions').delete().eq('id', question_id).execute()
+            except Exception:
+                pass
+            raise HTTPException(status_code=500, detail="Failed to save question answer key.")
+
+        return CreateQuestionResponse(
+            id=question_id,
+            category=row.get("category", normalized["category"]),
+            content=row.get("content", normalized["content"]),
+            options=row.get("options", normalized["options"]),
+            correct_answer=normalized["correct_answer"],
+            correct_answer_index=normalized["correct_answer_index"],
         )
     except HTTPException:
         raise

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import { useNavigate } from 'react-router-dom';
-import { Users, AlertTriangle, CheckCircle2, BarChart3, LogOut, Search, Check, X, BrainCircuit, Sparkles } from 'lucide-react';
+import { Users, AlertTriangle, CheckCircle2, BarChart3, LogOut, Search, Check, X, BrainCircuit, Sparkles, PlusSquare } from 'lucide-react';
 import axios from 'axios';
+import EducatorQuestionForm from '../components/EducatorQuestionForm';
 
 export default function EducatorDashboard() {
   const user = useStore((state) => state.user);
@@ -18,6 +19,7 @@ export default function EducatorDashboard() {
   const [edgePrereq, setEdgePrereq] = useState('');
   const [edgeDependent, setEdgeDependent] = useState('');
   const [reviewStatus, setReviewStatus] = useState('');
+  const [activeView, setActiveView] = useState('overview');
 
   // Note: For hackathon purpose, if backend route is not ready, we mock it.
   useEffect(() => {
@@ -153,12 +155,34 @@ export default function EducatorDashboard() {
         </div>
         
         <nav className="flex-1 space-y-1">
-          <button className="w-full flex items-center gap-3 px-3 py-2.5 bg-white/5 text-white text-sm font-medium rounded-lg transition-all relative">
-            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-4 bg-purple-500 rounded-r-full" />
+          <button
+            onClick={() => setActiveView('overview')}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-all relative ${
+              activeView === 'overview'
+                ? 'bg-white/5 text-white'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.02]'
+            }`}
+          >
+            {activeView === 'overview' && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-4 bg-purple-500 rounded-r-full" />}
             <AlertTriangle className="w-4 h-4 text-purple-400" />
             Cognitive Clusters
           </button>
-          <button className="w-full flex items-center gap-3 px-3 py-2.5 text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.02] text-sm font-medium rounded-lg transition-colors">
+          <button
+            onClick={() => setActiveView('add-questions')}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-all relative ${
+              activeView === 'add-questions'
+                ? 'bg-white/5 text-white'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.02]'
+            }`}
+          >
+            {activeView === 'add-questions' && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-4 bg-purple-500 rounded-r-full" />}
+            <PlusSquare className="w-4 h-4" />
+            Add Questions
+          </button>
+          <button
+            onClick={() => setActiveView('overview')}
+            className="w-full flex items-center gap-3 px-3 py-2.5 text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.02] text-sm font-medium rounded-lg transition-colors"
+          >
             <Users className="w-4 h-4" />
             Student Roster
           </button>
@@ -174,6 +198,9 @@ export default function EducatorDashboard() {
 
       {/* ── Main Content ── */}
       <div className="flex-1 p-6 md:p-10 overflow-y-auto relative z-10">
+        {activeView === 'add-questions' ? (
+          <EducatorQuestionForm />
+        ) : (
         <div className="max-w-6xl mx-auto pb-16">
           
           <header className="mb-10 flex flex-col md:flex-row justify-between md:items-end gap-6">
@@ -444,6 +471,7 @@ export default function EducatorDashboard() {
           </div>
           
         </div>
+        )}
       </div>
     </div>
   );

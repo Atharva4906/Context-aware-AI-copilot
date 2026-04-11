@@ -4,30 +4,10 @@ import ReactMarkdown from 'react-markdown';
 import { useStore } from '../store/useStore';
 import { 
   CheckCircle2, FileText, BrainCircuit, Target, 
-  Plus, ThumbsUp, ThumbsDown, Activity, 
-  Search, AlertTriangle, HelpCircle, Compass, Sparkles, Filter 
+  Plus, ThumbsUp, ThumbsDown, Search, Sparkles, Filter 
 } from 'lucide-react';
 
 const API = () => import.meta.env.VITE_API_URL || 'http://localhost:8000';
-
-// ── Helper function for styling feedback sections ──
-const getSectionStyle = (title) => {
-  const t = title.toLowerCase();
-  if (t.includes('reflect') || t.includes('progress') || t.includes('overview')) 
-    return { icon: Activity, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' };
-  if (t.includes('challenge') || t.includes('problem') || t.includes('current')) 
-    return { icon: Target, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20' };
-  if (t.includes('approach') || t.includes('analy') || t.includes('answer')) 
-    return { icon: Search, color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20' };
-  if (t.includes('misconception') || t.includes('error') || t.includes('address')) 
-    return { icon: AlertTriangle, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20' };
-  if (t.includes('question') || t.includes('guid') || t.includes('step')) 
-    return { icon: HelpCircle, color: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/20' };
-  if (t.includes('forward') || t.includes('success') || t.includes('path') || t.includes('conclusion')) 
-    return { icon: Compass, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' };
-  
-  return { icon: Sparkles, color: 'text-slate-300', bg: 'bg-neutral-800', border: 'border-white/10' };
-};
 
 export default function LearningHub() {
   const questions         = useStore((state) => state.questions);
@@ -87,59 +67,48 @@ export default function LearningHub() {
     }
   };
 
-  // ── Parse tutorFeedback into structured sections ──
-  const parsedFeedbackSections = useMemo(() => {
+  // ── Safe Parser: Only splits on actual major headers, keeping paragraphs intact ──
+  const parsedFeedbackBlocks = useMemo(() => {
     if (!tutorFeedback) return [];
     
+    // 1. Normalize common major headers so they are on their own lines
     let cleanFeedback = tutorFeedback
-      .replace(/(Final Answer:?|Explanation:?|Conclusion:?|Let's break down|Step \d+:?)/gi, '\n\n$1\n\n')
-      .replace(/(\*\*[A-Za-z0-9 ]+\*\*)/g, '\n$1\n');
+      .replace(/\*\*(Final Answer|Explanation|Conclusion|Understanding Your Thought Process|Breaking Down Your Strengths|Addressing Weak Concepts|Explanation Verified|Moving Forward)\*\*/gi, '\n\n$1\n\n')
+      .replace(/(Final Answer:?|Explanation:?|Conclusion:?|Let's break down|Step \d+:?|Understanding Your Thought Process:?|Breaking Down Your Strengths:?|Addressing Weak Concepts:?|Explanation Verified:?|Moving Forward:?)/gi, '\n\n$1\n\n');
 
     cleanFeedback = cleanFeedback.replace(/\n{3,}/g, '\n\n');
 
-    const lines = cleanFeedback.split('\n');
-    const parsedSections = [];
-    let currentSection = { title: 'Analysis Overview', content: [] };
+    const lines = cleanFeedback.split('\n').map(l => l.trim()).filter(Boolean);
+    const result = [];
+    let currentBlock = { header: 'Analysis Overview', lines: [] };
+
+    const knownHeaders = [
+      "final answer", "explanation", "conclusion", "understanding your thought process", 
+      "breaking down your strengths", "addressing weak concepts", "explanation verified", "moving forward", "analysis overview"
+    ];
 
     lines.forEach(line => {
-      const cleanLine = line.trim();
-      if (!cleanLine) return; 
+      const lowerLine = line.toLowerCase().replace(/:$/, '');
+      const isKnownHeader = knownHeaders.some(h => lowerLine === h || lowerLine.includes(h)) && line.length < 60;
+      const isStep = lowerLine.startsWith("step ");
+      const isHashHeader = line.startsWith('#');
 
-      const isHeader = cleanLine.startsWith('#') || 
-                      (cleanLine.startsWith('**') && cleanLine.endsWith('**')) ||
-                      (cleanLine.length < 60 && !cleanLine.match(/[.!?]$/) && !cleanLine.startsWith('-')) ||
-                      (cleanLine.match(/^(Step \d+|Final Answer|Conclusion|Explanation|Hint|Note):?$/i));
-
-      if (isHeader) {
-        if (currentSection.content.length > 0) {
-          parsedSections.push({ ...currentSection, content: currentSection.content.join('\n\n') });
+      // If it's a known header, start a new block. Otherwise, it's just text for the current block.
+      if (isKnownHeader || isStep || isHashHeader) {
+        if (currentBlock.lines.length > 0) {
+          result.push({ ...currentBlock });
         }
-        currentSection = { 
-          title: cleanLine.replace(/^[#*]+ */, '').replace(/\*+$/, '').replace(/:$/, ''), 
-          content: [] 
-        };
+        currentBlock = { header: line.replace(/^[#*]+ */, '').replace(/\*+$/, '').replace(/:$/, ''), lines: [] };
       } else {
-        if (cleanLine.length > 300) {
-          const sentences = cleanLine.split(/(?<=[.!?])\s+/);
-          let paragraph = [];
-          sentences.forEach((sentence, i) => {
-            paragraph.push(sentence);
-            if ((i + 1) % 2 === 0 || i === sentences.length - 1) {
-              currentSection.content.push(paragraph.join(' '));
-              paragraph = [];
-            }
-          });
-        } else {
-          currentSection.content.push(cleanLine);
-        }
+        currentBlock.lines.push(line);
       }
     });
 
-    if (currentSection.content.length > 0) {
-      parsedSections.push({ ...currentSection, content: currentSection.content.join('\n\n') });
+    if (currentBlock.lines.length > 0) {
+      result.push(currentBlock);
     }
 
-    return parsedSections;
+    return result;
   }, [tutorFeedback]);
 
   // ── Update store context + pre-detect correct answer ──
@@ -519,7 +488,7 @@ export default function LearningHub() {
               )}
             </div>
 
-            {/* ── Socratic AI Review with Structured Boxes ── */}
+            {/* ── CLEAN GENERAL BOX FEEDBACK ── */}
             {tutorFeedback && (
               <div
                 ref={feedbackRef}
@@ -536,31 +505,27 @@ export default function LearningHub() {
                   </div>
                 </div>
 
-                {/* STRUCTURED FEEDBACK BOXES */}
+                {/* SINGLE/GENERAL BOX RENDERING */}
                 <div className="px-6 md:px-8 py-8 flex flex-col gap-5">
-                  {parsedFeedbackSections.map((section, idx) => {
-                    const Style = getSectionStyle(section.title);
-                    const Icon = Style.icon;
-
-                    return (
-                      <div key={idx} className={`rounded-2xl border ${Style.border} ${Style.bg} overflow-hidden shadow-sm`}>
-                        <div className={`flex items-center gap-3 px-5 py-3.5 bg-black/20 border-b ${Style.border}`}>
-                          <Icon className={`h-5 w-5 ${Style.color}`} />
-                          <h4 className={`text-sm font-bold uppercase tracking-wider ${Style.color}`}>
-                            {section.title}
+                  {parsedFeedbackBlocks.map((block, idx) => (
+                    <div key={idx} className={`rounded-2xl border border-white/5 bg-white/[0.02] overflow-hidden shadow-sm`}>
+                      {block.header && block.header !== 'Analysis Overview' && (
+                        <div className={`px-5 py-3.5 bg-black/20 border-b border-white/5`}>
+                          <h4 className={`text-sm font-bold uppercase tracking-wider text-blue-400`}>
+                            {block.header}
                           </h4>
                         </div>
-                        <div className="px-5 py-4 text-base text-neutral-300 leading-relaxed prose prose-invert max-w-none
-                          prose-p:mb-2 prose-p:last:mb-0
-                          prose-strong:text-white
-                          prose-ul:my-2 prose-li:my-1
-                          prose-code:text-cyan-300 prose-code:bg-slate-900/80 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded
-                        ">
-                          <ReactMarkdown>{section.content}</ReactMarkdown>
-                        </div>
+                      )}
+                      <div className="px-5 py-4 text-base text-neutral-300 leading-relaxed prose prose-invert max-w-none
+                        prose-p:mb-2 prose-p:last:mb-0
+                        prose-strong:text-white
+                        prose-ul:my-2 prose-li:my-1
+                        prose-code:text-cyan-300 prose-code:bg-slate-900/80 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded
+                      ">
+                        <ReactMarkdown>{block.lines.join('\n\n')}</ReactMarkdown>
                       </div>
-                    );
-                  })}
+                    </div>
+                  ))}
                 </div>
 
                 {/* ── RL Feedback section ── */}

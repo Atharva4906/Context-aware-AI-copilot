@@ -61,6 +61,42 @@ def insert_question(category: str, content: str, options: list | None = None):
         print(f"Error inserting question: {e}")
         return None
 
+
+def insert_question_answer_key(question_id: str, correct_answer: str | None = None, correct_answer_index: int | None = None):
+    """Insert or update a question answer key mapped to an existing question id."""
+    try:
+        payload = {
+            'question_id': question_id,
+            'correct_answer': correct_answer,
+            'correct_answer_index': correct_answer_index
+        }
+        res = supabase.table('question_answer_keys').upsert(payload, on_conflict='question_id').execute()
+        return res.data[0] if res.data else None
+    except Exception as e:
+        print(f"Error inserting question answer key: {e}")
+        return None
+
+
+def get_question_answer_keys(question_ids: list[str]) -> dict:
+    """Fetch answer keys for question ids, returned as {question_id: {correct_answer, correct_answer_index}}."""
+    if not question_ids:
+        return {}
+    try:
+        res = supabase.table('question_answer_keys') \
+            .select('question_id,correct_answer,correct_answer_index') \
+            .in_('question_id', question_ids).execute()
+        rows = res.data if res.data else []
+        return {
+            row['question_id']: {
+                'correct_answer': row.get('correct_answer'),
+                'correct_answer_index': row.get('correct_answer_index')
+            }
+            for row in rows if row.get('question_id')
+        }
+    except Exception as e:
+        print(f"Error fetching question answer keys: {e}")
+        return {}
+
 def get_pending_misconception_ids(statuses: list = None) -> set:
     """Fetch misconception IDs that are pending or rejected in review queue."""
     if statuses is None:

@@ -77,6 +77,19 @@ CREATE TABLE IF NOT EXISTS questions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 7b. Question Answer Keys (separate table; references questions)
+-- Stores correct answer metadata without altering the questions table.
+CREATE TABLE IF NOT EXISTS question_answer_keys (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    question_id UUID NOT NULL UNIQUE REFERENCES questions(id) ON DELETE CASCADE,
+    correct_answer TEXT,
+    correct_answer_index INTEGER,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_correct_answer_index_non_negative CHECK (
+        correct_answer_index IS NULL OR correct_answer_index >= 0
+    )
+);
+
 -- 8. Alter Interaction Logs to support history dashboard
 -- Add columns to link interactions to specific questions and track resolution
 ALTER TABLE interaction_logs 

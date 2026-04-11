@@ -52,12 +52,14 @@ class QuestionModel(BaseModel):
     content: str
     options: Optional[List[str]] = None
     correct_answer: Optional[str] = None
+    correct_answer_index: Optional[int] = None
 
 class ParsedQuestion(BaseModel):
     category: str
     content: str
     options: Optional[List[str]] = None
     correct_answer: Optional[str] = None
+    correct_answer_index: Optional[int] = None
 
 class ParseQuestionRequest(BaseModel):
     raw_text: str
