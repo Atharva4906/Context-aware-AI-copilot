@@ -18,3 +18,16 @@ If you are developing a production application, we recommend using TypeScript wi
 # Pragyantra Frontend
 
 An intelligent educational platform that combines AI-powered learning with reinforcement learning to personalize student education and track progress in real-time.
+
+## 📋 Table of Contents
+
+- [Overview](#overview)
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Running the Project](#running-the-project)
+- [Project Structure](#project-structure)
+- [Available Scripts](#available-scripts)
+- [Components](#components)
+- [Contributing](#contributing)
