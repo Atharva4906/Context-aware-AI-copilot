@@ -1,8 +1,22 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import { BrainCircuit, User, Lock, Mail, Sparkles } from 'lucide-react';
-import axios from 'axios';
+import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
+
+const PENDING_ROLE_KEY = 'pending_auth_role';
+
+function profileFromSession(session, fallbackRole = 'student') {
+  const user = session?.user;
+  const fullName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'User';
+  const role = user?.user_metadata?.role || fallbackRole || 'student';
+  return {
+    id: user?.id,
+    name: fullName,
+    role,
+    email: user?.email || null,
+  };
+}
 
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
@@ -11,9 +25,40 @@ export default function Auth() {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState('');
+  const [oauthLoading, setOauthLoading] = useState(false);
   
   const navigate = useNavigate();
   const login = useStore((state) => state.login);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) return;
+
+    const pendingRole = localStorage.getItem(PENDING_ROLE_KEY) || role;
+
+    supabase.auth.getSession().then(({ data, error: sessionError }) => {
+      if (sessionError) return;
+      if (data?.session) {
+        const profile = profileFromSession(data.session, pendingRole);
+        login(profile);
+        localStorage.removeItem(PENDING_ROLE_KEY);
+        navigate(profile.role === 'educator' ? '/admin' : '/dashboard');
+      }
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        const savedRole = localStorage.getItem(PENDING_ROLE_KEY) || role;
+        const profile = profileFromSession(session, savedRole);
+        login(profile);
+        localStorage.removeItem(PENDING_ROLE_KEY);
+        navigate(profile.role === 'educator' ? '/admin' : '/dashboard');
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [login, navigate, role]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -32,6 +77,32 @@ export default function Auth() {
       }
     } catch (err) {
       setError('An error occurred during authentication.');
+    }
+  };
+
+  const handleGoogleAuth = async () => {
+    setError('');
+    if (!isSupabaseConfigured || !supabase) {
+      setError('Supabase OAuth is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
+      return;
+    }
+
+    try {
+      setOauthLoading(true);
+      localStorage.setItem(PENDING_ROLE_KEY, role);
+      const redirectTo = `${window.location.origin}/`;
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo,
+        },
+      });
+      if (oauthError) {
+        throw oauthError;
+      }
+    } catch (oauthErr) {
+      setOauthLoading(false);
+      setError(oauthErr?.message || 'Google sign-in failed.');
     }
   };
 
@@ -142,6 +213,25 @@ export default function Auth() {
             }`}
           >
             {isLogin ? 'Access Cognitive Engine' : 'Initialize Profile'}
+          </button>
+
+          <div className="relative py-1">
+            <div className="absolute inset-0 flex items-center" aria-hidden>
+              <div className="w-full border-t border-white/10" />
+            </div>
+            <div className="relative flex justify-center">
+              <span className="bg-[#111113] px-3 text-[11px] uppercase tracking-wider text-neutral-500">or</span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleGoogleAuth}
+            disabled={oauthLoading}
+            className="w-full py-3.5 rounded-xl text-sm font-semibold text-white border border-white/10 bg-[#0a0a0a] hover:bg-neutral-900 disabled:opacity-60 transition-all flex items-center justify-center gap-2"
+          >
+            <span className="inline-flex w-5 h-5 rounded-full bg-white text-black items-center justify-center text-xs font-bold">G</span>
+            {oauthLoading ? 'Redirecting to Google...' : `Continue with Google (${isStudent ? 'Student' : 'Educator'})`}
           </button>
         </form>
 
