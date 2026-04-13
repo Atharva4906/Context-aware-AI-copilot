@@ -377,4 +377,3 @@ def update_rl_policy(pattern_hash: str, suggested_topic: str, student_feedback: 
 "Judges, most AI tutors are arrogant; they assume their diagnosis is always right. We built our Reinforcement Learning engine to be collaborative.
 By utilizing a Contextual Bandit algorithm, our AI recognizes error patterns and predicts underlying weaknesses. But if the AI is wrong, the student can explicitly reject the diagnosis. The RL engine registers this as a negative reward, instantly applies the update rule to its Q-value, and stops bothering the student with redundant fundamentals. The LangGraph pipeline ensures each reasoning step is transparent and modular, making it easy to debug and improve individual nodes. The AI mathematically learns the student's actual cognitive profile through conversation, making it a highly empathetic, adaptive, and mathematically rigorous co-pilot."
 
-
