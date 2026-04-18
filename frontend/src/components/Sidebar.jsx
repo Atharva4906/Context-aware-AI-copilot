@@ -1,37 +1,11 @@
 import React from 'react';
-import { BookOpen, Compass, Activity, LayoutDashboard, BrainCircuit, ShieldCheck, Gauge, Zap, LogOut } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { BookOpen, Compass, Activity, LayoutDashboard, BrainCircuit, ShieldCheck, Gauge, Zap } from 'lucide-react';
 import { useStore } from '../store/useStore';
-import { isSupabaseConfigured, supabase } from '../lib/supabaseClient';
 
 export default function Sidebar() {
   const currentView = useStore(state => state.currentView);
   const setCurrentView = useStore(state => state.setCurrentView);
-  const logout = useStore(state => state.logout);
   const user = useStore(state => state.user) || { name: 'Atharva P.' };
-  const navigate = useNavigate();
-
-  const userName = user?.name || 'Student';
-  const initials = userName
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map(part => part[0]?.toUpperCase() || '')
-    .join('') || 'ST';
-
-  const handleLogout = async () => {
-    try {
-      if (isSupabaseConfigured && supabase) {
-        await supabase.auth.signOut();
-      }
-    } catch (err) {
-      console.error('Supabase sign out failed', err);
-    } finally {
-      localStorage.removeItem('pending_auth_role');
-      logout();
-      navigate('/');
-    }
-  };
 
   const navItems = [
     { icon: LayoutDashboard, label: 'Dashboard' },
@@ -94,23 +68,16 @@ export default function Sidebar() {
           <div className="w-9 h-9 rounded-full bg-neutral-900 flex items-center justify-center border border-white/10 group-hover:border-blue-500/30 transition-colors relative overflow-hidden">
             {/* Subtle glow inside avatar */}
             <div className="absolute inset-0 bg-blue-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-            <span className="text-xs font-bold text-neutral-300 relative z-10">{initials}</span>
+            <span className="text-xs font-bold text-neutral-300 relative z-10">AP</span>
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-neutral-200 truncate">{userName}</p>
+            <p className="text-sm font-semibold text-neutral-200 truncate">Atharva P.</p>
             <div className="flex items-center gap-1 text-[11px] text-blue-400/80 font-medium">
               <Zap className="w-3 h-3" />
               Pro Student
             </div>
           </div>
         </div>
-        <button
-          onClick={handleLogout}
-          className="mt-3 flex items-center gap-3 px-3 py-2 w-full text-sm font-medium text-neutral-500 hover:text-rose-400 transition-colors rounded-lg hover:bg-rose-500/10"
-        >
-          <LogOut className="w-4 h-4" />
-          Sign Out
-        </button>
       </div>
       
     </div>
